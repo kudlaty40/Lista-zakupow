@@ -20,19 +20,10 @@ function appRequireAirtableConfigManager($family) {
 
 appRequireAirtableConfigManager((string) ($_GET['family'] ?? ''));
 
-$configFile = __DIR__ . '/airtable-config.php';
-$config = [];
-if (file_exists($configFile)) {
-    $loaded = require $configFile;
-    if (is_array($loaded)) {
-        $config = $loaded;
-    }
-}
-
-$airtableApiKey = $config['api_key'] ?? (getenv('AIRTABLE_API_KEY') ?: '');
-$airtableBaseId = $config['base_id'] ?? (getenv('AIRTABLE_BASE_ID') ?: '');
-$airtableTableName = $config['table_name'] ?? (getenv('AIRTABLE_TABLE_NAME') ?: 'shopping_list');
-$airtableUserField = $config['user_field'] ?? 'user';
+$airtableApiKey = (string) (getenv('AIRTABLE_API_KEY') ?: '');
+$airtableBaseId = (string) (getenv('AIRTABLE_BASE_ID') ?: '');
+$airtableTableName = (string) (getenv('AIRTABLE_TABLE_NAME') ?: 'shopping_list');
+$airtableUserField = (string) (getenv('AIRTABLE_USER_FIELD') ?: 'user');
 
 if (!isAirtableConfigured($airtableApiKey, $airtableBaseId, $airtableTableName)) {
     echo json_encode(['success' => true, 'connected' => false, 'configured' => false]);

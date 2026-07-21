@@ -61,10 +61,12 @@ $action = trim((string) ($payload['action'] ?? ''));
 
 if ($method === 'POST' && $action === 'login') {
     appStartSession();
-    $attempts = $_SESSION['login_attempts'][$familySlug] ?? ['count' => 0, 'until' => 0];
-    if (($attempts['until'] ?? 0) > time()) appJsonError(429, 'Zbyt wiele prób logowania. Spróbuj ponownie za kilka minut.');
     $username = normalizeAccountUsername($payload['username'] ?? '');
     $password = (string) ($payload['password'] ?? '');
+    $accountRateKey = $familySlug . ':' . ($username !== '' ? $username : 'unknown');
+    $ipRateKey = $familySlug . ':' . appClientIp();
+    appRequireLoginRateLimit('account-login', $accountRateKey);
+    appRequireLoginRateLimit('ip-login', $ipRateKey);
     foreach ($accounts as $position => $account) {
         if (($account['username'] ?? '') !== $username || !appVerifyPassword($password, $account['password'] ?? '')) continue;
         if (appPasswordNeedsMigration($account['password'] ?? '')) {
@@ -75,15 +77,17 @@ if ($method === 'POST' && $action === 'login') {
         $_SESSION['user'] = $username;
         $_SESSION['family'] = $familySlug;
         $_SESSION['is_admin'] = ($account['isAdmin'] ?? false) === true;
-        unset($_SESSION['login_attempts'][$familySlug]);
+        appTouchSession();
+        appClearRateLimit('account-login', $accountRateKey);
+        appClearRateLimit('ip-login', $ipRateKey);
         echo json_encode(['success' => true, 'account' => publicAccountView($accounts[$position]), 'family' => $familySlug], JSON_UNESCAPED_UNICODE); exit;
     }
-    $count = (int) ($attempts['count'] ?? 0) + 1;
-    $_SESSION['login_attempts'][$familySlug] = ['count' => $count, 'until' => $count >= 5 ? time() + 300 : 0];
+    appRecordRateLimitAttempt('account-login', $accountRateKey, 5);
+    appRecordRateLimitAttempt('ip-login', $ipRateKey, 10);
     appJsonError(401, 'Nieprawidłowy login lub hasło.');
 }
 if ($method === 'POST' && $action === 'logout') {
-    appRequireLogin($familySlug); $_SESSION = []; session_destroy(); echo json_encode(['success' => true]); exit;
+    appRequireLogin($familySlug); appEndSession(); echo json_encode(['success' => true]); exit;
 }
 if ($method === 'GET' && ($_GET['action'] ?? '') === 'session') {
     appRequireLogin($familySlug);

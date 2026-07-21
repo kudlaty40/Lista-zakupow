@@ -8,6 +8,7 @@ api/private-paths.php
 # Server runtime data and local recovery snapshots
 /storage/
 /api/storage/
+/api/rate-limits/
 *.log
 
 # Local diagnostic and deployment artifacts

@@ -89,15 +89,6 @@ const accountsList = document.getElementById("accounts-list");
 const productsLoadButton = document.getElementById("products-load-button");
 const productsStatus = document.getElementById("products-status");
 const productsDataList = document.getElementById("products-data-list");
-const airtableApiKeyInput = document.getElementById("airtable-api-key");
-const airtableBaseIdInput = document.getElementById("airtable-base-id");
-const airtableTableNameInput = document.getElementById("airtable-table-name");
-const airtableUserFieldInput = document.getElementById("airtable-user-field");
-const airtableDataFieldInput = document.getElementById("airtable-data-field");
-const airtableUpdatedFieldInput = document.getElementById("airtable-updated-field");
-const airtableLoadButton = document.getElementById("airtable-load-button");
-const airtableSaveButton = document.getElementById("airtable-save-button");
-const airtableConfigStatus = document.getElementById("airtable-config-status");
 const airtableConnectionStatus = document.getElementById("airtable-connection-status");
 const syncModeSelect = document.getElementById("sync-mode");
 const syncWeeksInput = document.getElementById("sync-weeks");
@@ -955,10 +946,6 @@ async function syncToAirtable(force = false) {
   }
 }
 
-function getAirtableSettingsUrl(user = getActiveUser()) {
-  return `api/airtable-settings.php?${getFamilyQueryPart()}&user=${encodeURIComponent(user)}`;
-}
-
 function getAccountsUrl(user = getActiveUser()) {
   return `${ACCOUNTS_STORAGE_URL}?${getFamilyQueryPart()}&user=${encodeURIComponent(user)}`;
 }
@@ -1006,14 +993,6 @@ function setActiveAdminTab(tab) {
   if (activeAdminTab === "products") {
     renderProductsData();
   }
-}
-
-function setAirtableStatus(message, isError = false) {
-  if (!airtableConfigStatus) {
-    return;
-  }
-  airtableConfigStatus.textContent = message;
-  airtableConfigStatus.classList.toggle("error", isError);
 }
 
 function setAccountsStatus(message, isError = false) {
@@ -1886,73 +1865,8 @@ async function setAccountPassword() {
   }
 }
 
-function fillAirtableConfigForm(config) {
-  if (!airtableApiKeyInput) {
-    return;
-  }
-  airtableApiKeyInput.value = config.api_key || "";
-  airtableBaseIdInput.value = config.base_id || "";
-  airtableTableNameInput.value = config.table_name || "shopping_list";
-  airtableUserFieldInput.value = config.user_field || "user";
-  airtableDataFieldInput.value = config.data_field || "data";
-  airtableUpdatedFieldInput.value = config.updated_field || "updated_at";
-}
-
 async function loadAirtableConfig() {
-  if (!isAirtableConfigManager()) {
-    setAirtableStatus("Konfiguracja Airtable jest dostępna wyłącznie dla Bartka w rodzinie Polak.", true);
-    return;
-  }
-
-  setAirtableStatus("Wczytywanie konfiguracji Airtable...");
-  try {
-    const response = await fetch(getAirtableSettingsUrl(), {
-      method: "GET",
-      headers: { Accept: "application/json" },
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.success) {
-      throw new Error(payload.error || `HTTP ${response.status}`);
-    }
-    fillAirtableConfigForm(payload.config || {});
-    setAirtableStatus("Konfiguracja Airtable została wczytana.");
-    await checkAirtableConnection();
-  } catch (error) {
-    setAirtableStatus(`Błąd wczytywania konfiguracji: ${error.message}`, true);
-  }
-}
-
-async function saveAirtableConfig() {
-  if (!isAirtableConfigManager()) {
-    setAirtableStatus("Konfiguracja Airtable jest dostępna wyłącznie dla Bartka w rodzinie Polak.", true);
-    return;
-  }
-
-  const body = {
-    api_key: airtableApiKeyInput.value.trim(),
-    base_id: airtableBaseIdInput.value.trim(),
-    table_name: airtableTableNameInput.value.trim() || "shopping_list",
-    user_field: airtableUserFieldInput.value.trim() || "user",
-    data_field: airtableDataFieldInput.value.trim() || "data",
-    updated_field: airtableUpdatedFieldInput.value.trim() || "updated_at",
-  };
-
-  setAirtableStatus("Zapisywanie konfiguracji Airtable...");
-  try {
-    const response = await fetch(getAirtableSettingsUrl(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.success) {
-      throw new Error(payload.error || `HTTP ${response.status}`);
-    }
-    await loadAirtableConfig();
-    setAirtableStatus("Konfiguracja Airtable zapisana.");
-  } catch (error) {
-    setAirtableStatus(`Błąd zapisu konfiguracji: ${error.message}`, true);
-  }
+  if (isAirtableConfigManager()) await checkAirtableConnection();
 }
 
 async function saveItems() {
@@ -2387,27 +2301,12 @@ async function fetchNutritionViaProxy(query) {
 }
 
 async function fetchNutritionForName(query) {
-  let result = null;
   try {
-    result = await fetchNutritionViaProxy(query);
+    return await fetchNutritionViaProxy(query);
   } catch (error) {
     console.warn("Nutrition proxy lookup failed:", error);
+    return null;
   }
-  try {
-    if (!result) {
-      result = await fetchNutritionOpenFoodFacts(query);
-    }
-  } catch (error) {
-    console.warn("Open Food Facts lookup failed:", error);
-  }
-  if (!result) {
-    try {
-      result = await fetchNutritionOpenFoodRepo(query);
-    } catch (error) {
-      console.warn("Open Food Repo lookup failed:", error);
-    }
-  }
-  return result;
 }
 
 function parseNutritionInputNumber(value) {
@@ -3066,8 +2965,10 @@ function createItemRow(item, order, isPurchased, section = "shop") {
     deleteButton.textContent = "−";
     deleteButton.addEventListener("click", (event) => {
       event.stopPropagation();
+      const accepted = window.confirm(`Czy na pewno chcesz trwale usunąć produkt „${item.name}”?`);
+      if (!accepted) return;
       items = items.filter((existing) => existing.id !== item.id);
-      saveItems();
+      void saveItems().catch((error) => setSyncStatus(`Nie udało się usunąć produktu: ${error.message}`, true));
       renderItems();
     });
     appendProductAction(deleteButton);
@@ -3712,7 +3613,6 @@ function showLoginScreen() {
   loginError.textContent = "";
   userSettings = { ...DEFAULT_USER_SETTINGS };
   setUserSettingsStatus("");
-  setAirtableStatus("");
   setSyncStatus("");
   setConnectionStatus("nie sprawdzono");
   setAccountsStatus("");
@@ -3849,12 +3749,6 @@ syncMinutesInput?.addEventListener("change", () => {
 });
 syncNowButton?.addEventListener("click", () => {
   void syncToAirtable(true);
-});
-airtableLoadButton?.addEventListener("click", () => {
-  void loadAirtableConfig();
-});
-airtableSaveButton?.addEventListener("click", () => {
-  void saveAirtableConfig();
 });
 accountsLoadButton?.addEventListener("click", () => {
   void loadAccounts();

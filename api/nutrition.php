@@ -1,8 +1,6 @@
 <?php
+require_once __DIR__ . '/security.php';
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
@@ -15,8 +13,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
+appRequireLogin();
+$nutritionRateKey = (string) ($_SESSION['user'] ?? '') . ':' . appClientIp();
+appRequireLoginRateLimit('nutrition', $nutritionRateKey, 'Zbyt wiele zapytań o dane żywieniowe. Spróbuj ponownie za kilka minut.');
+appRecordRateLimitAttempt('nutrition', $nutritionRateKey, 30, 900);
+
 $query = trim((string) ($_GET['q'] ?? ''));
-if ($query === '') {
+if ($query === '' || strlen($query) > 300) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Missing query']);
     exit;

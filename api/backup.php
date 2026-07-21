@@ -2,9 +2,7 @@
 /* Private filesystem backups. This file contains no credentials. */
 
 function appBackupDirectory() {
-    $configFile = __DIR__ . '/private-paths.php';
-    $config = file_exists($configFile) ? require $configFile : [];
-    $directory = rtrim((string) ($config['backup_dir'] ?? ''), '/\\');
+    $directory = rtrim((string) (getenv('APP_BACKUP_DIR') ?: ''), '/\\');
     if ($directory === '' || !is_dir($directory) || !is_writable($directory)) {
         appJsonError(500, 'Prywatny katalog kopii bezpieczeństwa jest niedostępny. Zapis został wstrzymany.');
     }
@@ -105,7 +103,7 @@ function appBackupBeforeMutation($reason = 'runtime-write') {
 
         appBackupCopyTree(appStorageDir(), $snapshot . '/storage');
         $configRoot = $snapshot . '/config';
-        foreach (['security-config.php', 'airtable-config.php', 'private-paths.php'] as $configName) {
+        foreach ([] as $configName) {
             $source = __DIR__ . '/' . $configName;
             if (is_file($source)) {
                 if (!is_dir($configRoot)) mkdir($configRoot, 0700, true);

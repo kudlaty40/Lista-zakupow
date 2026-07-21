@@ -57,15 +57,6 @@ function jsonError($status, $message) {
 }
 
 $storageDir = resolveStorageDir();
-$airtableConfig = [];
-$airtableConfigFile = __DIR__ . '/airtable-config.php';
-if (file_exists($airtableConfigFile)) {
-    $loadedConfig = require $airtableConfigFile;
-    if (is_array($loadedConfig)) {
-        $airtableConfig = $loadedConfig;
-    }
-}
-
 $method = $_SERVER['REQUEST_METHOD'];
 $familySlug = normalizeFamilySlug($_GET['family'] ?? '');
 $user = isset($_GET['user']) ? trim((string) $_GET['user']) : '';
@@ -133,12 +124,12 @@ if (!is_dir($dataDir) && !@mkdir($dataDir, 0777, true)) {
 
 $storageFile = $dataDir . '/' . $userKey . '.json';
 
-$airtableApiKey = $airtableConfig['api_key'] ?? (getenv('AIRTABLE_API_KEY') ?: '');
-$airtableBaseId = $airtableConfig['base_id'] ?? (getenv('AIRTABLE_BASE_ID') ?: '');
-$airtableTableName = $airtableConfig['table_name'] ?? (getenv('AIRTABLE_TABLE_NAME') ?: 'shopping_list');
-$airtableUserField = $airtableConfig['user_field'] ?? (getenv('AIRTABLE_USER_FIELD') ?: 'user');
-$airtableDataField = $airtableConfig['data_field'] ?? (getenv('AIRTABLE_DATA_FIELD') ?: 'data');
-$airtableUpdatedAtField = $airtableConfig['updated_field'] ?? (getenv('AIRTABLE_UPDATED_FIELD') ?: 'updated_at');
+$airtableApiKey = (string) (getenv('AIRTABLE_API_KEY') ?: '');
+$airtableBaseId = (string) (getenv('AIRTABLE_BASE_ID') ?: '');
+$airtableTableName = (string) (getenv('AIRTABLE_TABLE_NAME') ?: 'shopping_list');
+$airtableUserField = (string) (getenv('AIRTABLE_USER_FIELD') ?: 'user');
+$airtableDataField = (string) (getenv('AIRTABLE_DATA_FIELD') ?: 'data');
+$airtableUpdatedAtField = (string) (getenv('AIRTABLE_UPDATED_FIELD') ?: 'updated_at');
 
 function isAirtableConfigured($apiKey, $baseId, $tableName) {
     return $apiKey !== '' && $baseId !== '' && $tableName !== '';

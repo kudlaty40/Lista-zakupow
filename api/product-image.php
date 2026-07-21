@@ -41,12 +41,35 @@ $imageInfo = @getimagesize($_FILES['image']['tmp_name']);
 $mime = is_array($imageInfo) ? ($imageInfo['mime'] ?? '') : '';
 $extensions = ['image/webp' => 'webp', 'image/jpeg' => 'jpg', 'image/png' => 'png'];
 if (!isset($extensions[$mime])) imageJsonError(400, 'Obsługiwane są zdjęcia WebP, JPEG i PNG.');
+if (!function_exists('imagewebp')) imageJsonError(500, 'Serwer nie obsługuje bezpiecznego przetwarzania zdjęć.');
 
 appBackupBeforeMutation('product-image');
 if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) imageJsonError(500, 'Nie można przygotować magazynu zdjęć.');
-foreach (glob($directory . '/' . $imageId . '.*') ?: [] as $old) @unlink($old);
-$target = $directory . '/' . $imageId . '.' . $extensions[$mime];
-if (!move_uploaded_file($_FILES['image']['tmp_name'], $target)) imageJsonError(500, 'Nie można zapisać zdjęcia.');
+$existing = glob($directory . '/' . $imageId . '.*') ?: [];
+$existingBytes = array_sum(array_map('filesize', array_filter($existing, 'is_file')));
+$allImages = glob($directory . '/*.*') ?: [];
+$totalBytes = array_sum(array_map('filesize', array_filter($allImages, 'is_file')));
+if (count($allImages) - count($existing) >= 100 || $totalBytes - $existingBytes + $_FILES['image']['size'] > 50 * 1024 * 1024) {
+    imageJsonError(413, 'Osiągnięto limit zdjęć lub ich łącznego rozmiaru.');
+}
+$source = match ($mime) {
+    'image/jpeg' => @imagecreatefromjpeg($_FILES['image']['tmp_name']),
+    'image/png' => @imagecreatefrompng($_FILES['image']['tmp_name']),
+    default => @imagecreatefromwebp($_FILES['image']['tmp_name']),
+};
+if (!$source) imageJsonError(400, 'Nie można bezpiecznie przetworzyć zdjęcia.');
+$temporary = $directory . '/.' . bin2hex(random_bytes(12)) . '.webp';
+if (!imagewebp($source, $temporary, 85)) {
+    imagedestroy($source);
+    imageJsonError(500, 'Nie można zapisać zdjęcia.');
+}
+imagedestroy($source);
+foreach ($existing as $old) @unlink($old);
+$target = $directory . '/' . $imageId . '.webp';
+if (!rename($temporary, $target)) {
+    @unlink($temporary);
+    imageJsonError(500, 'Nie można zapisać zdjęcia.');
+}
 @chmod($target, 0600);
 header('Content-Type: application/json; charset=utf-8');
 echo json_encode(['success' => true, 'imageId' => $imageId], JSON_UNESCAPED_UNICODE);

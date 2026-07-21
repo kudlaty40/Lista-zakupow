@@ -66,10 +66,9 @@ function ensureFamiliesIndex($storageDir) {
 
     $indexFile = $familiesDir . '/families.json';
     if (!file_exists($indexFile)) {
-        $securityConfig = file_exists(__DIR__ . '/security-config.php') ? require __DIR__ . '/security-config.php' : [];
-        $defaultPassword = (string) (($securityConfig['super_admin_password_hash'] ?? '') ?: getenv('SUPER_ADMIN_PASSWORD_HASH') ?: '');
+        $defaultPassword = (string) (getenv('SUPER_ADMIN_PASSWORD_HASH') ?: '');
         if (!str_starts_with($defaultPassword, '$')) {
-            jsonError(500, 'Skonfiguruj hash administratora globalnego w api/security-config.php.');
+            jsonError(500, 'Skonfiguruj zmienną środowiskową SUPER_ADMIN_PASSWORD_HASH.');
         }
         $seed = [
             'superAdminPassword' => $defaultPassword,
@@ -191,7 +190,13 @@ $action = trim((string) ($payload['action'] ?? ''));
 
 if ($action === 'super_admin_login') {
     $password = trim((string) ($payload['password'] ?? ''));
+    $accountRateKey = 'super-admin';
+    $ipRateKey = 'super-admin:' . appClientIp();
+    appRequireLoginRateLimit('account-login', $accountRateKey);
+    appRequireLoginRateLimit('ip-login', $ipRateKey);
     if (!validateSuperAdminPassword($index, $password)) {
+        appRecordRateLimitAttempt('account-login', $accountRateKey, 5);
+        appRecordRateLimitAttempt('ip-login', $ipRateKey, 10);
         jsonError(401, 'Nieprawidłowe hasło administratora globalnego.');
     }
 
@@ -202,6 +207,9 @@ if ($action === 'super_admin_login') {
     appStartSession();
     session_regenerate_id(true);
     $_SESSION['super_admin'] = true;
+    appTouchSession();
+    appClearRateLimit('account-login', $accountRateKey);
+    appClearRateLimit('ip-login', $ipRateKey);
 
     echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
     exit;

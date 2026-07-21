@@ -28,7 +28,10 @@ register_shutdown_function(function () {
 
 function appStorageDir() {
     $configured = trim((string) (getenv('APP_STORAGE_DIR') ?: ''));
-    $storageDir = $configured !== '' ? $configured : dirname(__DIR__) . '/storage';
+    if ($configured === '') {
+        appJsonError(500, 'Brakuje bezpiecznej konfiguracji magazynu danych.');
+    }
+    $storageDir = $configured;
     if (!is_dir($storageDir) || !is_writable($storageDir)) {
         appJsonError(500, 'Katalog danych aplikacji jest niedostępny.');
     }
@@ -45,7 +48,7 @@ function appStartSession() {
         return;
     }
 
-    $lifetime = 14 * 24 * 60 * 60;
+    $lifetime = 8 * 60 * 60;
     ini_set('session.use_strict_mode', '1');
     ini_set('session.gc_maxlifetime', (string) $lifetime);
     ini_set('session.cookie_lifetime', (string) $lifetime);
@@ -58,6 +61,34 @@ function appStartSession() {
         'samesite' => 'Lax',
     ]);
     session_start();
+    if (!empty($_SESSION['_last_activity']) && (time() - (int) $_SESSION['_last_activity']) > $lifetime) {
+        $_SESSION = [];
+        session_destroy();
+        appClearSessionCookie();
+        session_start();
+    }
+}
+
+function appClearSessionCookie() {
+    if (session_name() === '') return;
+    setcookie(session_name(), '', [
+        'expires' => time() - 3600,
+        'path' => '/',
+        'secure' => appIsHttps(),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+}
+
+function appEndSession() {
+    appStartSession();
+    $_SESSION = [];
+    session_destroy();
+    appClearSessionCookie();
+}
+
+function appTouchSession() {
+    $_SESSION['_last_activity'] = time();
 }
 
 function appJsonError($status, $message) {
@@ -89,6 +120,7 @@ function appRequireLogin($family = '') {
     if ($family !== '' && !hash_equals((string) $_SESSION['family'], (string) $family)) {
         appJsonError(403, 'Brak dostępu do tej rodziny.');
     }
+    appTouchSession();
 }
 
 function appRequireFamilyAdmin($family) {
@@ -103,6 +135,53 @@ function appRequireSuperAdmin() {
     if (empty($_SESSION['super_admin'])) {
         appJsonError(403, 'Wymagane są uprawnienia administratora globalnego.');
     }
+    appTouchSession();
+}
+
+function appClientIp() {
+    $ip = trim((string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : 'unknown';
+}
+
+function appRateLimitFile($scope, $identifier) {
+    $safeScope = preg_replace('/[^a-z0-9_-]/i', '-', $scope);
+    $key = hash('sha256', $safeScope . '|' . $identifier);
+    $directory = appStorageDir() . '/rate-limits';
+    if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) {
+        appJsonError(500, 'Nie można przygotować ochrony logowania.');
+    }
+    return $directory . '/' . $safeScope . '-' . $key . '.json';
+}
+
+function appRateLimitRead($path) {
+    $raw = @file_get_contents($path);
+    $data = is_string($raw) ? json_decode($raw, true) : null;
+    return is_array($data) ? $data : ['count' => 0, 'window_started' => time(), 'blocked_until' => 0];
+}
+
+function appRequireLoginRateLimit($scope, $identifier, $message = 'Zbyt wiele prób logowania. Spróbuj ponownie za kilka minut.') {
+    $data = appRateLimitRead(appRateLimitFile($scope, $identifier));
+    if ((int) ($data['blocked_until'] ?? 0) > time()) {
+        appJsonError(429, $message);
+    }
+}
+
+function appRecordRateLimitAttempt($scope, $identifier, $limit, $windowSeconds = 900) {
+    $path = appRateLimitFile($scope, $identifier);
+    $data = appRateLimitRead($path);
+    $now = time();
+    if ($now - (int) ($data['window_started'] ?? 0) >= $windowSeconds) {
+        $data = ['count' => 0, 'window_started' => $now, 'blocked_until' => 0];
+    }
+    $data['count'] = (int) ($data['count'] ?? 0) + 1;
+    if ($data['count'] >= $limit) $data['blocked_until'] = $now + $windowSeconds;
+    file_put_contents($path, json_encode($data), LOCK_EX);
+    @chmod($path, 0600);
+}
+
+function appClearRateLimit($scope, $identifier) {
+    $path = appRateLimitFile($scope, $identifier);
+    if (is_file($path)) @unlink($path);
 }
 
 function appPasswordAlgorithm() {
@@ -121,7 +200,7 @@ function appVerifyPassword($password, $stored) {
     if ($password === '' || !is_string($stored) || $stored === '') {
         return false;
     }
-    return str_starts_with($stored, '$') ? password_verify($password, $stored) : hash_equals($stored, $password);
+    return str_starts_with($stored, '$') && password_verify($password, $stored);
 }
 
 function appPasswordNeedsMigration($stored) {

@@ -1,83 +1,62 @@
 # Lista zakupów
 
-Prywatna aplikacja webowa/PWA do prowadzenia wspólnych list zakupów. Obsługuje wiele rodzin, konta użytkowników, synchronizację danych, historię produktów oraz prosty dziennik diety. Interfejs działa po polsku i może zostać zainstalowany na telefonie jak aplikacja.
+Prywatna aplikacja PWA do wspólnych list zakupów dla wielu rodzin. Zapewnia konta użytkowników, synchronizację, zdjęcia produktów, dziennik diety oraz opcjonalną integrację Airtable.
 
 ## Funkcje
 
-- wspólna lista zakupów dla wielu rodzin;
-- konta użytkowników, administratorzy rodzin i administrator globalny;
-- lista wszystkich produktów z kategoriami, historią i zdjęciami;
-- tryb offline: lokalny cache, kolejka zmian i synchronizacja po odzyskaniu połączenia;
-- dziennik diety oraz makroskładniki pobierane z Open Food Facts/Open Food Repo albo wpisywane ręcznie;
-- opcjonalna synchronizacja danych przez Airtable;
-- kopie zapasowe wykonywane przed zapisem danych;
-- PWA z manifestem i service workerem.
+- wspólne listy zakupów i historia produktów;
+- administrator globalny, administratorzy rodzin i zwykłe konta;
+- tryb offline z kolejką synchronizacji;
+- dziennik diety i makroskładniki;
+- zdjęcia produktów oraz PWA do instalacji na telefonie;
+- opcjonalna synchronizacja Airtable.
 
 ## Wymagania
 
-- PHP 8.0 lub nowszy z JSON; dla synchronizacji z Airtable zalecane jest rozszerzenie cURL;
-- Apache 2.4 z obsługą PHP i plików `.htaccess` (`AllowOverride`), `mod_headers` oraz `mod_deflate`; `mod_rewrite` jest przydatny, jeśli hosting wymusza przekierowanie na HTTPS;
-- zapisywalny katalog danych oraz osobny, prywatny katalog kopii zapasowych;
-- HTTPS w środowisku publicznym.
+- PHP 8.0+ z JSON, cURL i GD;
+- Apache 2.4 z obsługą `.htaccess`, `mod_headers` i `mod_deflate`;
+- HTTPS w środowisku publicznym;
+- prywatne, zapisywalne katalogi danych i backupów poza webrootem.
 
-Nie są wymagane Node.js, Composer ani baza SQL.
+## Konfiguracja środowiska
+
+Sekrety i ścieżki ustaw wyłącznie jako zmienne środowiskowe procesu PHP:
+
+- `APP_STORAGE_DIR` — prywatny katalog danych;
+- `APP_BACKUP_DIR` — prywatny katalog backupów;
+- `SUPER_ADMIN_PASSWORD_HASH` — hash Argon2id lub bcrypt hasła administratora globalnego;
+- `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID` oraz opcjonalnie `AIRTABLE_TABLE_NAME`, `AIRTABLE_USER_FIELD`, `AIRTABLE_DATA_FIELD`, `AIRTABLE_UPDATED_FIELD`.
+
+Nie twórz `.env`, `api/airtable-config.php`, `api/security-config.php` ani `api/private-paths.php`. Nie umieszczaj sekretów w `.htaccess`, Git ani w kodzie przeglądarki.
+
+Hash hasła można wygenerować lokalnie:
+
+```powershell
+php -r "echo password_hash('SILNE_HASLO', PASSWORD_ARGON2ID), PHP_EOL;"
+```
 
 ## Uruchomienie lokalne
 
-1. Zainstaluj PHP i przejdź do katalogu projektu.
-2. Utwórz prywatny katalog kopii, na przykład `archives/backups`.
-3. Skopiuj `api/private-paths.php.example` jako `api/private-paths.php` i ustaw w nim pełną ścieżkę do katalogu kopii. Ten plik jest ignorowany przez Git.
-4. Skopiuj `api/security-config.php.example` jako `api/security-config.php`. Wygeneruj hash hasła administratora globalnego i wstaw go do konfiguracji:
-
-   ```powershell
-   php -r "echo password_hash('Zmien-to-na-silne-haslo', PASSWORD_DEFAULT), PHP_EOL;"
-   ```
-
-   Nie zapisuj hasła jawnego w pliku ani w repozytorium.
-5. Upewnij się, że PHP może zapisywać w `storage/` oraz w wybranym katalogu kopii. Zalecane jest ustawienie `APP_STORAGE_DIR` na katalog poza webrootem.
-6. Uruchom serwer w katalogu projektu:
+1. Ustaw powyższe zmienne na katalogi dostępne do zapisu przez PHP.
+2. W katalogu projektu uruchom:
 
    ```powershell
    php -S localhost:8000
    ```
 
-7. Otwórz `http://localhost:8000`, wybierz **Admin**, zaloguj się hasłem administratora globalnego, utwórz pierwszą rodzinę i jej konto administratora.
+3. Otwórz `http://localhost:8000`, wybierz **Admin**, zaloguj się hasłem administratora globalnego i utwórz pierwszą rodzinę.
 
-## Konfiguracja Airtable (opcjonalna)
+## Airtable
 
-Aplikacja działa bez Airtable; w tym wariancie dane są przechowywane lokalnie na serwerze. Aby włączyć synchronizację:
+Integracja jest opcjonalna. Token powinien mieć dostęp wyłącznie do jednej bazy i zakresy `data.records:read` oraz `data.records:write`. Struktura tabeli jest opisana w [api/airtable-table-setup.md](api/airtable-table-setup.md).
 
-1. Skopiuj `api/airtable-config.php.example` jako `api/airtable-config.php`.
-2. Wprowadź token PAT, Base ID i nazwy pól. Plik jest ignorowany przez Git i zablokowany przez `api/.htaccess`.
-3. Nadaj tokenowi wyłącznie uprawnienia `data.records:read` i `data.records:write` do jednej używanej bazy.
-4. Skonfiguruj tabelę według [api/airtable-table-setup.md](api/airtable-table-setup.md).
+## Wdrożenie
 
-Nigdy nie umieszczaj tokenu Airtable w `script.js`, `index.html`, README ani w zmiennych repozytorium publicznego.
+1. Skonfiguruj zmienne środowiskowe w panelu hostingu lub PHP-FPM poza katalogiem publicznym.
+2. Wdróż pliki aplikacji przez FTP, bez `.git`, `storage/`, `archives/`, `.vscode/` i sekretów.
+3. Sprawdź logowanie, utworzenie rodziny, zapis produktu, backup i opcjonalną synchronizację Airtable.
+4. Po poprawnym uruchomieniu certyfikatu SSL włącz HSTS na serwerze.
 
-## Wdrożenie na hostingu
+## Bezpieczeństwo
 
-1. Włącz HTTPS i ustaw katalog strony jako katalog projektu.
-2. Prześlij pliki aplikacji, ale nie przesyłaj `.git`, `storage/`, `archives/`, `.vscode/` ani prywatnych konfiguracji z innego środowiska.
-3. Utwórz na serwerze prywatne katalogi danych i backupów. Ustaw `APP_STORAGE_DIR` na katalog poza webrootem, jeśli hosting umożliwia ustawienie zmiennych środowiskowych PHP.
-4. Utwórz na serwerze pliki `api/private-paths.php` i `api/security-config.php`; opcjonalnie także `api/airtable-config.php`. Nie dodawaj ich do Git.
-5. Sprawdź: utworzenie rodziny, logowanie, dodanie produktu, utworzenie backupu oraz — jeśli włączono — synchronizację Airtable.
-
-## Bezpieczeństwo i publikowanie kodu
-
-Do publicznego repozytorium mogą trafić wyłącznie pliki źródłowe i przykłady konfiguracji. Nie publikuj:
-
-- `storage/` i `api/storage/` — mogą zawierać konta, hashe haseł, listy i zdjęcia;
-- `archives/` — kopie danych;
-- `.vscode/sftp.json` — dane wdrożeniowe;
-- `api/security-config.php`, `api/private-paths.php`, `api/airtable-config.php` ani plików `.env`;
-- tokenów Airtable, haseł, kluczy prywatnych i danych FTP/SFTP.
-
-Jeśli sekret trafił do repozytorium lub historii Git, natychmiast go unieważnij/zmień, usuń z historii i utwórz świeże repozytorium bez starej historii. Samo usunięcie pliku w kolejnym commicie nie wystarcza.
-
-## Struktura projektu
-
-- `index.html`, `styles.css`, `script.js` — interfejs aplikacji;
-- `api/` — API PHP, konta, dane, obrazy, backup i integracje;
-- `storage/` — dane runtime (ignorowane przez Git);
-- `icons/`, `manifest.webmanifest`, `sw.js` — zasoby PWA;
-- `api/airtable-table-setup.md` — konfiguracja tabeli Airtable.
+Nie publikuj katalogów danych i backupów, tokenów Airtable, haseł, kluczy prywatnych ani danych FTP/SFTP. Jeśli sekret trafi do repozytorium, unieważnij go, usuń historię zawierającą sekret i utwórz czyste repozytorium.
