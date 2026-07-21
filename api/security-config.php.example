@@ -1,0 +1,7 @@
+<?php
+// Copy this file to security-config.php and keep the copy out of Git.
+// Generate the value with password_hash(); never store the plain-text password.
+
+return [
+    'super_admin_password_hash' => '$2y$12$replace_this_with_a_real_password_hash',
+];

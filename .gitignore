@@ -1,0 +1,15 @@
+# Secrets and editor connection settings
+.vscode/sftp.json
+api/security-config.php
+api/airtable-config.php
+api/database-config.php
+api/private-paths.php
+
+# Server runtime data and local recovery snapshots
+/storage/
+/api/storage/
+*.log
+
+# Local diagnostic and deployment artifacts
+/archives/
+*.bak

@@ -1,0 +1,455 @@
+﻿<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lista zakupów</title>
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Lista zakupów" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/app-icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <div id="family-screen" class="card">
+      <div class="family-header">
+        <h1>Wybór rodziny</h1>
+        <button id="open-super-admin" type="button" class="secondary small">Admin</button>
+      </div>
+      <p>Wybierz rodzinę, aby przejść do logowania.</p>
+      <label class="field-name">
+        Rodzina
+        <select id="family-select"></select>
+      </label>
+      <button id="family-continue-button" type="button">Przejdź do logowania</button>
+      <p id="family-screen-error" class="error"></p>
+    </div>
+
+    <div id="super-admin-screen" class="card hidden">
+      <h1>Panel administratora globalnego</h1>
+      <p>Zaloguj się hasłem administratora globalnego, aby zarządzać rodzinami.</p>
+
+      <div id="super-admin-login-box">
+        <label class="field-name">
+          Hasło admina globalnego
+          <input id="super-admin-password" type="password" placeholder="Hasło" autocomplete="off" />
+        </label>
+        <div class="admin-actions">
+          <button id="super-admin-login-button" type="button">Wejdź</button>
+          <button id="super-admin-back-button" type="button" class="secondary">Wstecz</button>
+        </div>
+      </div>
+
+      <div id="super-admin-panel" class="hidden">
+        <div class="panel-header">
+          <h2>Dodaj nową rodzinę</h2>
+        </div>
+        <div class="admin-config-grid">
+          <label class="field-name">
+            Nazwa rodziny
+            <input id="new-family-name" type="text" placeholder="np. Rodzina Kowalskich" />
+          </label>
+          <label class="field-name">
+            Login pierwszego administratora rodziny
+            <input id="new-family-admin-username" type="text" placeholder="np. bartek" />
+          </label>
+          <label class="field-name">
+            Hasło pierwszego administratora rodziny
+            <input id="new-family-admin-password" type="password" placeholder="Hasło" />
+          </label>
+          <label class="field-name">
+            Nazwa wyświetlana pierwszego administratora
+            <input id="new-family-admin-display" type="text" placeholder="np. Bartek" />
+          </label>
+        </div>
+        <div class="admin-actions">
+          <button id="create-family-button" type="button">Utwórz rodzinę</button>
+        </div>
+
+        <div class="panel-header">
+          <h2>Lista rodzin</h2>
+        </div>
+        <label class="field-name">
+          Wybierz rodzinę do edycji
+          <select id="super-admin-family-select"></select>
+        </label>
+        <div id="super-admin-family-list" class="items"></div>
+
+        <div class="panel-header">
+          <h2>Zmień hasło admina globalnego</h2>
+        </div>
+        <div class="admin-config-grid">
+          <label class="field-name">
+            Obecne hasło
+            <input id="super-admin-old-password" type="password" />
+          </label>
+          <label class="field-name">
+            Nowe hasło
+            <input id="super-admin-new-password" type="password" />
+          </label>
+        </div>
+        <div class="admin-actions">
+          <button id="change-super-admin-password-button" type="button" class="secondary">Zmień hasło</button>
+          <button id="super-admin-close-button" type="button" class="secondary">Zamknij</button>
+        </div>
+      </div>
+      <p id="super-admin-status" class="panel-note"></p>
+    </div>
+
+    <div id="family-edit-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="panel-header">
+          <h2>Edytuj rodzinę</h2>
+          <button id="family-edit-close" type="button" class="secondary small">Zamknij</button>
+        </div>
+        <div class="admin-config-grid">
+          <label class="field-name">
+            Nazwa rodziny
+            <input id="family-edit-name" type="text" />
+          </label>
+          <label class="field-name">
+            Login administratora rodziny
+            <input id="family-edit-admin-username" type="text" />
+          </label>
+          <label class="field-name">
+            Nazwa wyświetlana administratora
+            <input id="family-edit-admin-display" type="text" />
+          </label>
+        </div>
+        <div class="admin-actions">
+          <button id="family-edit-save" type="button">Zapisz zmiany</button>
+          <button id="family-edit-cancel" type="button" class="secondary">Anuluj</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="login-screen" class="card hidden">
+      <h1>Logowanie</h1>
+      <div class="login-family-row">
+        <p id="login-family-label" class="panel-note"></p>
+        <button id="change-family-button" type="button" class="secondary small">Zmień rodzinę</button>
+      </div>
+      <p>Wprowadź krótki login lub inicjał, aby otworzyć listę zakupów.</p>
+      <input id="login-input" type="text" placeholder="Login / inicjał" autocomplete="username" />
+      <input id="login-password" type="password" placeholder="Hasło" autocomplete="current-password" />
+      <p class="login-helper">Podaj krótki login lub inicjał</p>
+      <button id="login-button">Zaloguj</button>
+      <p id="login-error" class="error"></p>
+    </div>
+
+    <div id="shop-screen" class="hidden">
+      <header class="topbar">
+        <div>
+          <h1>Lista zakupów</h1>
+          <p>Mała aplikacja do zakupów mobilnych.</p>
+        </div>
+        <button id="logout-button" class="secondary">Wyloguj</button>
+      </header>
+      <p id="offline-status" class="panel-note hidden" role="status" aria-live="polite"></p>
+
+      <nav class="tabs">
+        <button class="tab-button active" data-tab="shop">Lista zakupów</button>
+        <button class="tab-button" data-tab="all">Wszystkie produkty</button>
+        <button class="tab-button" data-tab="diary">Moja dieta</button>
+        <button class="tab-button" data-tab="settings">Ustawienia</button>
+      </nav>
+
+      <section id="shop-tab" class="tab-panel card">
+        <div class="panel-header">
+          <h2>Zakupy</h2>
+          <div class="panel-actions">
+            <button id="shop-sort-toggle" type="button" class="secondary small">kolejność</button>
+            <button id="clear-purchased" class="secondary small">Zakończ zakupy</button>
+          </div>
+        </div>
+        <p id="shop-loading-status" class="panel-note hidden" aria-live="polite"></p>
+        <div id="shop-items" class="items"></div>
+      </section>
+
+      <section id="all-tab" class="tab-panel card hidden">
+        <div class="panel-header">
+          <h2>Wszystkie produkty</h2>
+          <p class="panel-note">Odznacz produkt, ustaw nową ilość i jednostkę, a następnie wróci on na listę zakupów po potwierdzeniu.</p>
+        </div>
+        <div id="all-items" class="items"></div>
+      </section>
+
+      <section id="diary-tab" class="tab-panel card hidden">
+        <div class="panel-header">
+          <h2>Moja dieta - makro zjedzone</h2>
+        </div>
+        <p class="panel-note">Makro na tej karcie zawsze liczone jest dla podanej ilości produktu.</p>
+
+        <div class="settings-grid">
+          <label class="field-name">
+            Data
+            <input id="diary-date" type="date" />
+          </label>
+          <label class="field-name">
+            Produkt
+            <input id="diary-product-name" type="text" placeholder="Nazwa produktu z listy" />
+          </label>
+        </div>
+
+        <div class="form-row">
+          <label class="field-qty">
+            Ilość
+            <input id="diary-quantity" type="text" maxlength="6" inputmode="decimal" value="1" />
+          </label>
+          <label class="field-unit">
+            Jednostka
+            <select id="diary-unit">
+              <option value="szt">szt</option>
+              <option value="kg">kg</option>
+              <option value="g">gramy</option>
+              <option value="l">litr</option>
+              <option value="ml">mililitry</option>
+              <option value="opak">opak</option>
+            </select>
+          </label>
+          <div class="field-photo">
+            <button id="add-diary-entry-button" type="button" class="add-product-button" title="Dodaj wpis">+</button>
+          </div>
+        </div>
+
+        <div id="diary-summary" class="card"></div>
+        <div id="diary-items" class="items"></div>
+      </section>
+
+      <section id="settings-tab" class="tab-panel card hidden">
+        <div class="panel-header">
+          <h2>Ustawienia użytkownika</h2>
+        </div>
+        <p class="panel-note">Wybierz, jak wyświetlać makro w aplikacji.</p>
+
+        <div class="settings-grid">
+          <label class="field-name">
+            Tryb wyświetlania makro
+            <select id="macro-display-mode">
+              <option value="per100g">Na 100 g produktu</option>
+              <option value="perAmount">Na ilość oznaczoną przy produkcie</option>
+            </select>
+          </label>
+          <label class="settings-toggle">
+            <input id="macro-visible-products" type="checkbox" />
+            Pokazuj makro przy produktach
+          </label>
+          <label class="settings-toggle">
+            <input id="macro-visible-diary" type="checkbox" checked />
+            Pokazuj makro na karcie "Moja dieta"
+          </label>
+          <label class="settings-toggle">
+            <input id="shopping-owner-visible" type="checkbox" checked />
+            Pokazuj oznaczenie osoby dodającej/przenoszącej produkt na liście zakupów
+          </label>
+          <label class="settings-toggle">
+            <input id="shopping-category-grouping" type="checkbox" />
+            Grupuj listę zakupów według kategorii
+          </label>
+          <label class="settings-toggle">
+            <input id="shopping-move-on-selection" type="checkbox" />
+            Przenoś produkt od razu po zaznaczeniu
+          </label>
+        </div>
+
+        <div class="admin-actions">
+          <button id="save-user-settings-button" type="button">Zapisz ustawienia</button>
+        </div>
+        <p id="user-settings-status" class="panel-note"></p>
+        <div id="admin-tools" class="admin-tools hidden">
+          <div class="panel-header">
+            <h2>Narzędzia administratora</h2>
+          </div>
+          <p class="panel-note">Dostęp po zalogowaniu hasłem konta administratora (np. Bartek).</p>
+
+          <div class="admin-tabs" role="tablist" aria-label="Kategorie narzędzi administratora">
+            <button id="admin-tab-accounts" type="button" class="admin-tab-button" data-admin-tab="accounts">Konta</button>
+            <button id="admin-tab-airtable" type="button" class="admin-tab-button active" data-admin-tab="airtable">Airtable</button>
+            <button id="admin-tab-sync" type="button" class="admin-tab-button" data-admin-tab="sync">Synchronizacja danych</button>
+            <button id="admin-tab-products" type="button" class="admin-tab-button" data-admin-tab="products">Produkty</button>
+          </div>
+
+          <section id="admin-airtable-panel" class="admin-tab-panel">
+            <div class="panel-header">
+              <h2>Airtable</h2>
+            </div>
+
+          <div class="admin-config-grid">
+            <label class="field-name">
+              Airtable API Key
+              <input id="airtable-api-key" type="password" placeholder="Token Airtable" />
+            </label>
+            <label class="field-name">
+              Airtable Base ID
+              <input id="airtable-base-id" type="text" placeholder="appxxxxxxxxxxxxxx" />
+            </label>
+            <label class="field-name">
+              Airtable Table Name
+              <input id="airtable-table-name" type="text" placeholder="shopping_list" />
+            </label>
+            <label class="field-name">
+              Pole użytkownika
+              <input id="airtable-user-field" type="text" placeholder="user" />
+            </label>
+            <label class="field-name">
+              Pole danych JSON
+              <input id="airtable-data-field" type="text" placeholder="data" />
+            </label>
+            <label class="field-name">
+              Pole daty aktualizacji
+              <input id="airtable-updated-field" type="text" placeholder="updated_at" />
+            </label>
+          </div>
+
+          <div class="admin-actions">
+            <button id="airtable-load-button" type="button" class="secondary small">Wczytaj konfigurację</button>
+            <button id="airtable-save-button" type="button">Zapisz konfigurację</button>
+          </div>
+          <p id="airtable-config-status" class="panel-note"></p>
+          <p id="airtable-connection-status" class="panel-note">Połączenie z Airtable: nie sprawdzono</p>
+          </section>
+
+          <div class="admin-section-separator"></div>
+
+          <section id="admin-sync-panel" class="admin-tab-panel hidden">
+
+          <div class="panel-header">
+            <h2>Synchronizacja danych</h2>
+          </div>
+          <p class="panel-note">Wysyłka do Airtable może być ręczna albo automatyczna według sumy tygodni, dni, godzin i minut.</p>
+
+          <div class="admin-config-grid">
+            <label class="field-name">
+              Tryb synchronizacji
+              <select id="sync-mode">
+                <option value="manual">Ręczny</option>
+                <option value="auto">Automatyczny</option>
+              </select>
+            </label>
+            <div class="form-row sync-interval-row">
+              <label class="field-qty">
+                Tygodnie
+                <input id="sync-weeks" type="number" min="0" value="0" />
+              </label>
+              <label class="field-qty">
+                Dni
+                <input id="sync-days" type="number" min="0" value="0" />
+              </label>
+              <label class="field-qty">
+                Godziny
+                <input id="sync-hours" type="number" min="0" value="0" />
+              </label>
+              <label class="field-qty">
+                Minuty
+                <input id="sync-minutes" type="number" min="0" value="30" />
+              </label>
+            </div>
+          </div>
+
+          <div class="admin-actions">
+            <button id="sync-now-button" type="button">Wyślij teraz</button>
+          </div>
+          <p id="sync-status" class="panel-note"></p>
+          </section>
+
+          <div class="admin-section-separator"></div>
+
+          <section id="admin-accounts-panel" class="admin-tab-panel hidden">
+
+          <div class="panel-header">
+            <h2>Narzędzia administratora - Konta</h2>
+          </div>
+          <p class="panel-note">Tworzenie i podgląd kont użytkowników aplikacji.</p>
+
+          <div class="admin-config-grid">
+            <label class="field-name">
+              Login użytkownika
+              <input id="account-username" type="text" placeholder="np. mkowalski" />
+            </label>
+            <label class="field-name">
+              Hasło użytkownika
+              <input id="account-password" type="password" placeholder="hasło" />
+            </label>
+            <label class="field-name">
+              Nowe hasło użytkownika
+              <input id="account-new-password" type="password" placeholder="nowe hasło" />
+            </label>
+            <label class="field-name">
+              Nazwa wyświetlana
+              <input id="account-display-name" type="text" placeholder="np. Marek Kowalski" />
+            </label>
+            <label class="field-name">
+              Notatka
+              <input id="account-note" type="text" placeholder="opcjonalnie" />
+            </label>
+          </div>
+
+          <div class="admin-actions">
+            <button id="accounts-load-button" type="button" class="secondary small">Wczytaj konta</button>
+            <button id="account-create-button" type="button">Utwórz konto</button>
+            <button id="account-set-password-button" type="button" class="secondary small">Ustaw nowe hasło</button>
+          </div>
+          <p id="accounts-status" class="panel-note"></p>
+          <div id="accounts-list" class="items"></div>
+          </section>
+
+          <div class="admin-section-separator"></div>
+
+          <section id="admin-products-panel" class="admin-tab-panel hidden">
+
+          <div class="panel-header">
+            <h2>Produkty pobrane przez API</h2>
+          </div>
+          <p class="panel-note">Pełne dane makro pobrane z API dla produktów na liście.</p>
+
+          <div class="admin-actions">
+            <button id="products-load-button" type="button" class="secondary small">Odśwież dane produktów</button>
+          </div>
+          <p id="products-status" class="panel-note"></p>
+          <div id="products-data-list" class="items"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="add-item-section" class="add-item card">
+        <h2>Dodaj produkt</h2>
+        <div class="form-row">
+          <label class="field-name">
+            Nazwa produktu
+            <input id="product-name" type="text" placeholder="Nazwa produktu" />
+          </label>
+          <label class="field-qty">
+            Ilość
+            <input id="product-quantity" type="text" maxlength="3" inputmode="decimal" value="1" />
+          </label>
+          <label class="field-unit">
+            Jednostka
+            <select id="product-unit">
+              <option value="szt">szt</option>
+              <option value="kg">kg</option>
+              <option value="g">gramy</option>
+              <option value="l">litr</option>
+              <option value="ml">mililitry</option>
+              <option value="opak">opak</option>
+            </select>
+          </label>
+          <label class="field-category">
+            Kategoria
+            <input id="product-category" type="text" list="product-category-suggestions" maxlength="60" placeholder="np. Nabiał" />
+          </label>
+          <div class="field-photo">
+            <button id="product-image-button" type="button" class="item-view-button" title="Zdjęcie produktu">📷</button>
+            <button id="add-item-button" type="button" class="add-product-button" title="Dodaj produkt">+</button>
+          </div>
+        </div>
+        <datalist id="product-category-suggestions"></datalist>
+      </section>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

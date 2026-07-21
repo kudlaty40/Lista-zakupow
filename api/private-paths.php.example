@@ -1,0 +1,5 @@
+<?php
+// Copy this file to private-paths.php on the server. Keep it out of Git.
+return [
+    'backup_dir' => '/home/kudlaty40/domains/grilujmy.pl/.grilujmy-backups',
+];

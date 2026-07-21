@@ -1,0 +1,19 @@
+{
+  "name": "Lista zakupów",
+  "short_name": "Zakupy",
+  "description": "Wspólna lista zakupów działająca także bez internetu.",
+  "lang": "pl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

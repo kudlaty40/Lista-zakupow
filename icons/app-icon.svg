@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Lista zakupów">
+  <rect width="512" height="512" rx="112" fill="#4f46e5"/>
+  <path d="M142 158h42l25 180h170l34-128H206" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="31"/>
+  <circle cx="239" cy="397" r="24" fill="#fff"/><circle cx="358" cy="397" r="24" fill="#fff"/>
+  <path d="M250 250l24 24 49-56" fill="none" stroke="#a7f3d0" stroke-linecap="round" stroke-linejoin="round" stroke-width="22"/>
+</svg>
