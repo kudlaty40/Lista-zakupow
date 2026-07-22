@@ -50,3 +50,7 @@ Przycisk rozwijania otrzymał rozmiar 44×44 px, taki sam jak pozostałe akcje p
 ### Ujednolicenie pola nazwy produktu
 
 Pole nazwy w formularzu edycji otrzymało jawny typ `text`, dzięki czemu korzysta z tych samych stylów aplikacji co ilość i kategoria. Wersję cache PWA zwiększono do `v17`.
+
+### Archiwum zakończonej wersji
+
+Utworzono lokalne archiwum `FINAL-IMMUTABLE-20260722T203340Z` z pełnym stanem FTP: `public_html`, `app-private` i `.grilujmy-backups`. Archiwum zawiera manifest SHA-256, kopię roboczą tylko do odczytu oraz szyfrowany plik stanu chroniony hasłem przekazanym poza repozytorium. Przywracanie jest ręczne, zakres ograniczony do katalogów aplikacji i nie podlega standardowej retencji snapshotów.

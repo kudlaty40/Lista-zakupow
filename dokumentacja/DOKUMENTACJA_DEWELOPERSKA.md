@@ -52,3 +52,7 @@ Lokalnie potrzebny jest PHP z JSON i cURL oraz zapisywalne prywatne katalogi dan
 ## Testy regresji
 
 Przed publikacją sprawdź logowanie i wylogowanie, izolację rodzin, zmianę haseł, zapis i odczyt produktów, zdjęcia, kategorie, potwierdzenie usuwania, ustawienia, tryb offline, synchronizację Airtable, nagłówki oraz blokadę plików prywatnych. Wykonaj `php -l` dla zmienionych endpointów i skan sekretów przed commitem.
+
+## Archiwum bazowe
+
+Jednorazowy stan zakończonego projektu jest przechowywany lokalnie w katalogu `archives/FINAL-IMMUTABLE-20260722T203340Z`. Zawiera pełny stan pobrany z FTP, manifest SHA-256 oraz szyfrowany plik `FTP-STATE.tar.gz.aes`. Odtworzenie jest ręczne i wymaga skryptu `archives/Restore-FinalImmutable.ps1`, hasła archiwum, parametru `-ConfirmRestore` oraz dodatkowego wpisania `RESTORE`. Skrypt usuwa i odtwarza wyłącznie zarządzane katalogi aplikacji: `public_html`, `app-private` i `.grilujmy-backups`.
