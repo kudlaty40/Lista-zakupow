@@ -65,6 +65,8 @@ Nie publikuj `storage/`, `archives/`, `.vscode/sftp.json`, plików konfiguracji,
 
 Po każdym podejrzeniu wycieku natychmiast unieważnij token, zmień hasła, usuń sekret z kopii wdrożeniowych i przejrzyj logi dostępu. Nie wykonuj commitów zawierających dane produkcyjne.
 
+Plik `off.json` zawiera publiczny zbiór danych Open Food Facts używany opcjonalnie do wyszukiwania informacji żywieniowych. Nie zawiera danych kont aplikacji ani sekretów. Przy dalszym rozpowszechnianiu zbioru należy zachować wymagane oznaczenia i warunki licencyjne Open Food Facts (ODbL).
+
 ## Licencja i przeznaczenie
 
 Projekt jest przeznaczony do prywatnego użytku własnego. Przed publicznym wdrożeniem należy samodzielnie sprawdzić konfigurację hostingu, uprawnienia plików i certyfikat TLS.

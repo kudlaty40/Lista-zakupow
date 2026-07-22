@@ -14,7 +14,12 @@ $payload = Join-Path $snapshot 'workspace'
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 
 Get-ChildItem -Force $workspace |
-  Where-Object { $_.Name -notin @('.git', 'archives', '.agents') } |
+  Where-Object {
+    $_.Name -notin @('.git', 'archives', '.agents', '.deployment-backups', 'app-private', 'deploy-stage') -and
+    $_.Name -notlike '.env*' -and
+    $_.Name -notlike '*.pem' -and
+    $_.Name -notlike '*.key'
+  } |
   ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force
   }

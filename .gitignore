@@ -1,5 +1,13 @@
 # Secrets and editor connection settings
 .vscode/sftp.json
+.vscode/*.sftp.json
+.env*
+!.env.example
+app-private/
+/.deployment-backups/
+/deploy-stage/
+*.pem
+*.key
 api/security-config.php
 api/airtable-config.php
 api/database-config.php
@@ -14,3 +22,4 @@ api/private-paths.php
 # Local diagnostic and deployment artifacts
 /archives/
 *.bak
+*.tmp
