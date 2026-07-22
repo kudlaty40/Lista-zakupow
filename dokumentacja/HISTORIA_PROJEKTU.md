@@ -38,3 +38,7 @@ Od tej pory każdą istotną zmianę funkcjonalną, bezpieczeństwa, FTP lub Git
 ### Ostatnie poprawki interfejsu mobilnego i produktów
 
 Wdrożono poprawione wyrównanie przycisku wylogowania na telefonach, trwałe stosowanie ustawienia ukrywania karty „Moja dieta” po logowaniu i odświeżeniu oraz cache PWA `v14`. W widoku „Wszystkie produkty” zastąpiono cienkie znaki rozwijania symbolami `▾`/`▴` i ujednolicono rozmiar, kształt oraz wyrównanie przycisków akcji.
+
+### Stałe wyrównanie strzałek produktów
+
+Kolumnę ilości uzupełniono o osobny wrapper ilości i jednostki oraz stałe miejsce na strzałkę. Strzałka jest teraz rysowana grubym obramowaniem CSS, a akcje produktów są rozmieszczane w stałej siatce. Wersję cache PWA zwiększono do `v15`.

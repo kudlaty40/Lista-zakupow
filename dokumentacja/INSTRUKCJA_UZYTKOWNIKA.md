@@ -14,7 +14,7 @@ Zmiany są zapisywane lokalnie, a po odzyskaniu połączenia synchronizowane z s
 
 Zakładka **Wszystkie produkty** zawiera katalog produktów rodziny. Strzałka przy ilości i jednostce rozwija dodatkowe akcje produktu, między innymi zdjęcie, wartości odżywcze, edycję i trwałe usunięcie. Akcje pojawiają się w wierszu poniżej. Trwałe usunięcie wymaga jednego potwierdzenia i nie można go cofnąć.
 
-Strzałka `▾` oznacza zwinięte akcje, a `▴` rozwinięte. Przyciski akcji mają jednolity rozmiar i kształt, dzięki czemu łatwiej obsługiwać je na telefonie.
+Strzałka przy ilości jest grubym symbolem graficznym: skierowana w dół oznacza zwinięte akcje, a w górę — rozwinięte. Jej pozycja jest stała niezależnie od jednostki produktu. Przyciski akcji mają jednolity rozmiar i kształt, dzięki czemu łatwiej obsługiwać je na telefonie.
 
 ## Zdjęcia i dieta
 

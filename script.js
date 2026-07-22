@@ -3230,15 +3230,18 @@ function createItemRow(item, order, isPurchased, section = "shop") {
 
   const quantity = document.createElement("div");
   quantity.className = "item-qty";
-  quantity.innerHTML = `<div class="item-qty-value">${formatQuantity(item.quantity)}</div><div class="item-unit">${item.unit}</div>`;
+  const quantityLabel = document.createElement("span");
+  quantityLabel.className = "item-qty-label";
+  quantityLabel.innerHTML = `<span class="item-qty-value">${formatQuantity(item.quantity)}</span><span class="item-unit">${item.unit}</span>`;
+  quantity.appendChild(quantityLabel);
 
   if (section === "all") {
     const expandButton = document.createElement("button");
     expandButton.type = "button";
     expandButton.className = "all-product-expand-button secondary small";
-    expandButton.textContent = expandedProductActions.has(item.id) ? "▴" : "▾";
-    expandButton.title = expandedProductActions.has(item.id) ? "Ukryj akcje produktu" : "Pokaż akcje produktu";
-    expandButton.setAttribute("aria-expanded", expandedProductActions.has(item.id) ? "true" : "false");
+    const isExpanded = expandedProductActions.has(item.id);
+    expandButton.title = isExpanded ? "Ukryj akcje produktu" : "Pokaż akcje produktu";
+    expandButton.setAttribute("aria-expanded", isExpanded ? "true" : "false");
     expandButton.setAttribute("aria-label", expandButton.title);
     expandButton.addEventListener("click", (event) => {
       event.stopPropagation();
