@@ -176,6 +176,7 @@ const DEFAULT_USER_SETTINGS = {
   syncMinutes: 30,
 };
 let userSettings = { ...DEFAULT_USER_SETTINGS };
+let userSettingsReady = false;
 let userViewSettings = { groupShoppingByCategory: false, moveOnSelection: false };
 let syncTimerId = null;
 let dataDirty = false;
@@ -633,7 +634,7 @@ function toggleShoppingSortMode() {
 
 function normalizeTabName(tab) {
   const allowedTabs = ["shop", "all", "diary", "settings"];
-  if (tab === "diary" && userSettings?.hideDiary === true) return "shop";
+  if (tab === "diary" && (!userSettingsReady || userSettings?.hideDiary === true)) return "shop";
   return allowedTabs.includes(tab) ? tab : "shop";
 }
 
@@ -2291,19 +2292,25 @@ async function loadItemsInBackground() {
     getCachedPayload("shared", user),
     getCachedPayload("diary", user),
   ]);
-  if (cachedShared) applySharedPayload(cachedShared);
+  if (cachedShared) {
+    applySharedPayload(cachedShared);
+    userSettingsReady = true;
+  }
   if (cachedDiary) applyDiaryPayload(cachedDiary);
   if (cachedShared || cachedDiary) {
     await restorePendingImages();
     renderItems();
+    setActiveTab(activeTab);
     setShopLoadingStatus("Odświeżanie listy…");
   } else {
     setShopLoadingStatus("Lista jest wczytywana, czekaj…");
   }
   try {
     await loadItems();
+    userSettingsReady = true;
     await restorePendingImages();
     renderItems();
+    setActiveTab(activeTab);
     void migrateLegacyImages();
     setShopLoadingStatus("");
     if (!navigator.onLine) {
@@ -3229,7 +3236,7 @@ function createItemRow(item, order, isPurchased, section = "shop") {
     const expandButton = document.createElement("button");
     expandButton.type = "button";
     expandButton.className = "all-product-expand-button secondary small";
-    expandButton.textContent = expandedProductActions.has(item.id) ? "⌃" : "⌄";
+    expandButton.textContent = expandedProductActions.has(item.id) ? "▴" : "▾";
     expandButton.title = expandedProductActions.has(item.id) ? "Ukryj akcje produktu" : "Pokaż akcje produktu";
     expandButton.setAttribute("aria-expanded", expandedProductActions.has(item.id) ? "true" : "false");
     expandButton.setAttribute("aria-label", expandButton.title);
@@ -3933,6 +3940,7 @@ function showShopScreen() {
   superAdminScreen?.classList.add("hidden");
   loginScreen.classList.add("hidden");
   shopScreen.classList.remove("hidden");
+  userSettingsReady = false;
   setAdminVisibility();
   shoppingSortMode = getStoredShoppingSortMode();
   updateShoppingSortButtonWidth();
@@ -3956,6 +3964,7 @@ function showLoginScreen() {
     loginPasswordInput.value = "";
   }
   currentAccount = null;
+  userSettingsReady = false;
   shoppingSortMode = "created";
   loginError.textContent = "";
   userSettings = { ...DEFAULT_USER_SETTINGS };
