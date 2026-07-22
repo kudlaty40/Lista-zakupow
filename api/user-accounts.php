@@ -34,7 +34,9 @@ function publicAccountView($account) {
     return ['username' => $account['username'] ?? '', 'displayName' => $account['displayName'] ?? '', 'note' => $account['note'] ?? '', 'isAdmin' => ($account['isAdmin'] ?? false) === true, 'createdAt' => $account['createdAt'] ?? ''];
 }
 function validNewPassword($password) {
-    return strlen($password) >= 12;
+    return strlen((string) $password) >= 8
+        && preg_match('/\d/', (string) $password)
+        && preg_match('/[^A-Za-z0-9]/', (string) $password);
 }
 
 $storageDir = resolveStorageDir();
@@ -95,6 +97,28 @@ if ($method === 'GET' && ($_GET['action'] ?? '') === 'session') {
     appJsonError(401, 'Konto nie istnieje.');
 }
 
+if ($method === 'POST' && $action === 'change_own_password') {
+    appRequireLogin($familySlug);
+    $currentPassword = (string) ($payload['currentPassword'] ?? '');
+    $newPassword = (string) ($payload['password'] ?? '');
+    if (!validNewPassword($newPassword)) appJsonError(400, 'Nowe hasło musi mieć co najmniej 8 znaków, cyfrę i znak specjalny.');
+    $username = normalizeAccountUsername($_SESSION['user'] ?? '');
+    foreach ($accounts as $i => $account) {
+        if (($account['username'] ?? '') !== $username) continue;
+        if (!appVerifyPassword($currentPassword, $account['password'] ?? '')) appJsonError(401, 'Nieprawidłowe obecne hasło.');
+        $accounts[$i]['password'] = appPasswordHash($newPassword);
+        if (!writeJsonFile($accountsFile, $accounts)) appJsonError(500, 'Nie udało się zmienić hasła.');
+        session_regenerate_id(true);
+        $_SESSION['user'] = $username;
+        $_SESSION['family'] = $familySlug;
+        $_SESSION['is_admin'] = ($accounts[$i]['isAdmin'] ?? false) === true;
+        appTouchSession();
+        echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    appJsonError(404, 'Nie znaleziono konta.');
+}
+
 appRequireFamilyAdmin($familySlug);
 if ($method === 'GET') { echo json_encode(['success' => true, 'accounts' => array_map('publicAccountView', $accounts), 'family' => $familySlug], JSON_UNESCAPED_UNICODE); exit; }
 if ($method !== 'POST') appJsonError(405, 'Method not allowed');
@@ -104,13 +128,23 @@ $password = (string) ($payload['password'] ?? '');
 $displayName = trim((string) ($payload['displayName'] ?? ''));
 $note = trim((string) ($payload['note'] ?? ''));
 if ($action === 'set_password') {
-    if ($username === '' || !validNewPassword($password)) appJsonError(400, 'Hasło musi mieć co najmniej 12 znaków.');
+    if ($username === '' || !validNewPassword($password)) appJsonError(400, 'Hasło musi mieć co najmniej 8 znaków, cyfrę i znak specjalny.');
     foreach ($accounts as $i => $account) if (($account['username'] ?? '') === $username) { $accounts[$i]['password'] = appPasswordHash($password); writeJsonFile($accountsFile, $accounts); echo json_encode(['success'=>true,'accounts'=>array_map('publicAccountView',$accounts)], JSON_UNESCAPED_UNICODE); exit; }
     appJsonError(404, 'Nie znaleziono konta.');
 }
 if ($action === 'edit_account' || $action === 'set_admin' || $action === 'delete_account') {
     foreach ($accounts as $i => $account) if (($account['username'] ?? '') === $username) {
-        if ($action === 'edit_account') { $accounts[$i]['displayName'] = $displayName; $accounts[$i]['note'] = $note; }
+        if ($action === 'edit_account') {
+            $nextIsAdmin = array_key_exists('isAdmin', $payload) ? ($payload['isAdmin'] ?? false) === true : (($account['isAdmin'] ?? false) === true);
+            if ($username === ($_SESSION['user'] ?? '') && !$nextIsAdmin) appJsonError(400, 'Nie możesz odebrać sobie roli administratora.');
+            $accounts[$i]['displayName'] = $displayName;
+            $accounts[$i]['note'] = $note;
+            $accounts[$i]['isAdmin'] = $nextIsAdmin;
+            if ($password !== '') {
+                if (!validNewPassword($password)) appJsonError(400, 'Hasło musi mieć co najmniej 8 znaków, cyfrę i znak specjalny.');
+                $accounts[$i]['password'] = appPasswordHash($password);
+            }
+        }
         if ($action === 'set_admin') $accounts[$i]['isAdmin'] = ($payload['isAdmin'] ?? false) === true;
         if ($action === 'delete_account') array_splice($accounts, $i, 1);
         $admins = array_filter($accounts, fn($a) => ($a['isAdmin'] ?? false) === true);

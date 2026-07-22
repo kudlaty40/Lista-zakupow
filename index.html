@@ -130,7 +130,7 @@
       <p id="super-admin-status" class="panel-note"></p>
     </div>
 
-    <div id="family-edit-modal" class="modal-overlay hidden">
+      <div id="family-edit-modal" class="modal-overlay hidden">
       <div class="modal-card">
         <div class="panel-header">
           <h2>Edytuj rodzinę</h2>
@@ -162,6 +162,28 @@
           <button id="family-edit-save" type="button">Zapisz zmiany</button>
           <button id="family-edit-password-save" type="button" class="secondary">Nadaj nowe hasło</button>
           <button id="family-edit-cancel" type="button" class="secondary">Anuluj</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="account-edit-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="panel-header">
+          <h2>Edytuj członka rodziny</h2>
+          <button id="account-edit-close" type="button" class="secondary small">Zamknij</button>
+        </div>
+        <div class="admin-config-grid">
+          <label class="field-name">Login (stały)<input id="account-edit-username" type="text" readonly /></label>
+          <label class="field-name">Nazwa wyświetlana<input id="account-edit-display-name" type="text" /></label>
+          <label class="field-name">Notatka<input id="account-edit-note" type="text" /></label>
+          <label class="settings-toggle"><input id="account-edit-is-admin" type="checkbox" />Administrator rodziny</label>
+          <label class="field-name">Nowe hasło (opcjonalnie)<input id="account-edit-password" type="password" autocomplete="new-password" /></label>
+          <label class="field-name">Powtórz nowe hasło<input id="account-edit-password-confirm" type="password" autocomplete="new-password" /></label>
+        </div>
+        <p class="panel-note">Nowe hasło: minimum 8 znaków, co najmniej jedna cyfra i jeden znak specjalny.</p>
+        <div class="admin-actions">
+          <button id="account-edit-save" type="button">Zapisz zmiany</button>
+          <button id="account-edit-cancel" type="button" class="secondary">Anuluj</button>
         </div>
       </div>
     </div>
@@ -272,7 +294,19 @@
               <label class="field-name">Tryb wyświetlania makro<select id="macro-display-mode"><option value="per100g">Na 100 g produktu</option><option value="perAmount">Na ilość oznaczoną przy produkcie</option></select></label>
               <label class="settings-toggle"><input id="macro-visible-products" type="checkbox" />Pokazuj makro przy produktach</label>
               <label class="settings-toggle"><input id="macro-visible-diary" type="checkbox" checked />Pokazuj makro na karcie „Moja dieta”</label>
+              <label class="settings-toggle"><input id="diary-tab-visible" type="checkbox" checked />Pokaż kartę „Moja dieta”</label>
             </div>
+          </article>
+          <article class="settings-card settings-card--security">
+            <div class="settings-card-header"><span class="settings-card-icon">🔐</span><div><h3>Zmiana hasła</h3><p>Ustaw nowe hasło dla aktualnie zalogowanego konta.</p></div></div>
+            <div class="settings-grid">
+              <label class="field-name">Obecne hasło<input id="own-current-password" type="password" autocomplete="current-password" /></label>
+              <label class="field-name">Nowe hasło<input id="own-new-password" type="password" autocomplete="new-password" /></label>
+              <label class="field-name">Powtórz nowe hasło<input id="own-new-password-confirm" type="password" autocomplete="new-password" /></label>
+            </div>
+            <p class="panel-note">Minimum 8 znaków, jedna cyfra i jeden znak specjalny.</p>
+            <div class="admin-actions"><button id="change-own-password-button" type="button">Zmień hasło</button></div>
+            <p id="own-password-status" class="panel-note" role="status" aria-live="polite"></p>
           </article>
           <article class="settings-card settings-card--shopping">
             <div class="settings-card-header"><span class="settings-card-icon">🛒</span><div><h3>Lista zakupów</h3><p>Organizacja listy i zachowanie produktów podczas zakupów.</p></div></div>

@@ -244,6 +244,12 @@ if ($action === 'set_last_selected_family') {
     exit;
 }
 
+function validAccountPassword($password) {
+    return strlen((string) $password) >= 8
+        && preg_match('/\d/', (string) $password)
+        && preg_match('/[^A-Za-z0-9]/', (string) $password);
+}
+
 if ($action === 'super_admin_logout') {
     appStartSession();
     $_SESSION = [];
@@ -263,8 +269,8 @@ appRequireSuperAdmin();
 if ($action === 'set_family_admin_password') {
     $familySlug = normalizeFamilySlug($payload['familySlug'] ?? '');
     $newPassword = trim((string) ($payload['password'] ?? ''));
-    if ($familySlug === '' || strlen($newPassword) < 12) {
-        jsonError(400, 'Wybierz rodzinę i podaj hasło o długości co najmniej 12 znaków.');
+    if ($familySlug === '' || !validAccountPassword($newPassword)) {
+        jsonError(400, 'Wybierz rodzinę i podaj hasło o długości co najmniej 8 znaków, z cyfrą i znakiem specjalnym.');
     }
     $familyDir = $storageDir . '/families/' . $familySlug;
     $accountsFile = $familyDir . '/user-accounts.json';
@@ -322,8 +328,8 @@ if ($action === 'create_family') {
     if ($adminUsername === '') {
         jsonError(400, 'Login pierwszego administratora rodziny jest wymagany.');
     }
-    if (strlen($adminPassword) < 12) {
-        jsonError(400, 'Hasło pierwszego administratora rodziny jest wymagane.');
+    if (!validAccountPassword($adminPassword)) {
+        jsonError(400, 'Hasło pierwszego administratora musi mieć co najmniej 8 znaków, cyfrę i znak specjalny.');
     }
 
     foreach ($index['families'] as $family) {

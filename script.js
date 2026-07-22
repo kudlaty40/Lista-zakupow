@@ -31,6 +31,16 @@ const familyEditAdminDisplayInput = document.getElementById("family-edit-admin-d
 const familyEditAdminPasswordInput = document.getElementById("family-edit-admin-password");
 const familyEditAdminPasswordConfirmInput = document.getElementById("family-edit-admin-password-confirm");
 const familyEditPasswordSaveButton = document.getElementById("family-edit-password-save");
+const accountEditModal = document.getElementById("account-edit-modal");
+const accountEditCloseButton = document.getElementById("account-edit-close");
+const accountEditCancelButton = document.getElementById("account-edit-cancel");
+const accountEditSaveButton = document.getElementById("account-edit-save");
+const accountEditUsernameInput = document.getElementById("account-edit-username");
+const accountEditDisplayNameInput = document.getElementById("account-edit-display-name");
+const accountEditNoteInput = document.getElementById("account-edit-note");
+const accountEditIsAdminCheckbox = document.getElementById("account-edit-is-admin");
+const accountEditPasswordInput = document.getElementById("account-edit-password");
+const accountEditPasswordConfirmInput = document.getElementById("account-edit-password-confirm");
 const loginScreen = document.getElementById("login-screen");
 const shopScreen = document.getElementById("shop-screen");
 const loginInput = document.getElementById("login-input");
@@ -74,12 +84,18 @@ const diaryItems = document.getElementById("diary-items");
 const macroDisplayModeSelect = document.getElementById("macro-display-mode");
 const macroVisibleProductsCheckbox = document.getElementById("macro-visible-products");
 const macroVisibleDiaryCheckbox = document.getElementById("macro-visible-diary");
+const diaryTabVisibleCheckbox = document.getElementById("diary-tab-visible");
 const shoppingOwnerVisibleCheckbox = document.getElementById("shopping-owner-visible");
 const shoppingCategoryGroupingCheckbox = document.getElementById("shopping-category-grouping");
 const allProductsCategoryGroupingCheckbox = document.getElementById("all-products-category-grouping");
 const shoppingMoveOnSelectionCheckbox = document.getElementById("shopping-move-on-selection");
 const saveUserSettingsButton = document.getElementById("save-user-settings-button");
 const userSettingsStatus = document.getElementById("user-settings-status");
+const ownCurrentPasswordInput = document.getElementById("own-current-password");
+const ownNewPasswordInput = document.getElementById("own-new-password");
+const ownNewPasswordConfirmInput = document.getElementById("own-new-password-confirm");
+const changeOwnPasswordButton = document.getElementById("change-own-password-button");
+const ownPasswordStatus = document.getElementById("own-password-status");
 const accountUsernameInput = document.getElementById("account-username");
 const accountPasswordInput = document.getElementById("account-password");
 const accountNewPasswordInput = document.getElementById("account-new-password");
@@ -151,6 +167,7 @@ const DEFAULT_USER_SETTINGS = {
   macroDisplayMode: "per100g",
   showMacroProducts: false,
   showMacroDiary: true,
+  hideDiary: false,
   showShoppingOwnerInfo: true,
   syncMode: "manual",
   syncWeeks: 0,
@@ -169,6 +186,7 @@ const collapsedCategorySections = new Set();
 const expandedProductActions = new Set();
 let superAdminAuthorized = false;
 let editingFamilySlug = "";
+let editingAccountUsername = "";
 let serverLastSelectedFamily = "";
 let offlineWriteChain = Promise.resolve();
 let sharedServerRevision = "";
@@ -615,6 +633,7 @@ function toggleShoppingSortMode() {
 
 function normalizeTabName(tab) {
   const allowedTabs = ["shop", "all", "diary", "settings"];
+  if (tab === "diary" && userSettings?.hideDiary === true) return "shop";
   return allowedTabs.includes(tab) ? tab : "shop";
 }
 
@@ -696,6 +715,7 @@ function normalizeSettings(rawSettings) {
     ? rawSettings.showMacroProducts === true
     : rawSettings?.showMacroShop === true && rawSettings?.showMacroAll === true;
   next.showMacroDiary = next.showMacroDiary !== false;
+  next.hideDiary = next.hideDiary === true;
   next.showShoppingOwnerInfo = next.showShoppingOwnerInfo !== false;
   next.syncMode = next.syncMode === "auto" ? "auto" : "manual";
   next.syncWeeks = Math.max(0, Number(next.syncWeeks) || 0);
@@ -1689,8 +1709,8 @@ async function setPasswordFromAccountRow(account) {
     return;
   }
   const normalizedPassword = newPassword.trim();
-  if (!normalizedPassword) {
-    setAccountsStatus("Nowe hasło nie może być puste.", true);
+  if (!validateNewPassword(normalizedPassword)) {
+    setAccountsStatus("Hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true);
     return;
   }
 
@@ -1724,14 +1744,39 @@ async function editAccountFromRow(account) {
     setAccountsStatus("Brak poprawnego loginu konta.", true);
     return;
   }
+  editingAccountUsername = username;
+  if (accountEditUsernameInput) accountEditUsernameInput.value = username;
+  if (accountEditDisplayNameInput) accountEditDisplayNameInput.value = account?.displayName || "";
+  if (accountEditNoteInput) accountEditNoteInput.value = account?.note || "";
+  if (accountEditIsAdminCheckbox) accountEditIsAdminCheckbox.checked = account?.isAdmin === true;
+  if (accountEditPasswordInput) accountEditPasswordInput.value = "";
+  if (accountEditPasswordConfirmInput) accountEditPasswordConfirmInput.value = "";
+  accountEditModal?.classList.remove("hidden");
+}
 
-  const displayName = window.prompt(`Nazwa wyświetlana dla ${username}:`, account?.displayName || "");
-  if (displayName == null) {
-    return;
-  }
-  const note = window.prompt(`Notatka dla ${username}:`, account?.note || "");
-  if (note == null) {
-    return;
+function closeAccountEditModal() {
+  editingAccountUsername = "";
+  accountEditModal?.classList.add("hidden");
+}
+
+function validateNewPassword(password) {
+  return password.length >= 8 && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
+}
+
+async function saveAccountEdit() {
+  const username = normalizeAccountUsername(editingAccountUsername || accountEditUsernameInput?.value || "");
+  const displayName = (accountEditDisplayNameInput?.value || "").trim();
+  const note = (accountEditNoteInput?.value || "").trim();
+  const isAdmin = accountEditIsAdminCheckbox?.checked === true;
+  const password = (accountEditPasswordInput?.value || "").trim();
+  const passwordConfirm = (accountEditPasswordConfirmInput?.value || "").trim();
+  const activeUsername = normalizeAccountUsername(currentAccount?.username || currentUser || "");
+
+  if (!username) return setAccountsStatus("Brak poprawnego loginu konta.", true);
+  if (username === activeUsername && !isAdmin) return setAccountsStatus("Nie możesz odebrać sobie roli administratora w tej sesji.", true);
+  if (password || passwordConfirm) {
+    if (password !== passwordConfirm) return setAccountsStatus("Hasła nie są identyczne.", true);
+    if (!validateNewPassword(password)) return setAccountsStatus("Hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true);
   }
 
   setAccountsStatus(`Zapisywanie zmian konta ${username}...`);
@@ -1742,8 +1787,10 @@ async function editAccountFromRow(account) {
       body: JSON.stringify({
         action: "edit_account",
         username,
-        displayName: displayName.trim(),
-        note: note.trim(),
+        displayName,
+        note,
+        isAdmin,
+        password,
       }),
     });
     const payload = await response.json();
@@ -1755,12 +1802,15 @@ async function editAccountFromRow(account) {
     if (username === activeUsername) {
       currentAccount = {
         ...currentAccount,
-        displayName: displayName.trim(),
+        displayName,
+        isAdmin,
       };
-      localStorage.setItem("shoppingDisplayName", displayName.trim());
+      localStorage.setItem("shoppingDisplayName", displayName);
+      localStorage.setItem("shoppingIsAdmin", isAdmin ? "true" : "false");
     }
 
     renderAccounts(payload.accounts || []);
+    closeAccountEditModal();
     setAccountsStatus(`Konto ${username} zostało zaktualizowane.`);
   } catch (error) {
     setAccountsStatus(`Błąd edycji konta: ${error.message}`, true);
@@ -1842,8 +1892,8 @@ async function createAccount() {
     setAccountsStatus("Podaj poprawny login użytkownika.", true);
     return;
   }
-  if (!password) {
-    setAccountsStatus("Podaj hasło dla konta użytkownika.", true);
+  if (!validateNewPassword(password)) {
+    setAccountsStatus("Hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true);
     return;
   }
 
@@ -1893,8 +1943,8 @@ async function setAccountPassword() {
     setAccountsStatus("Podaj poprawny login użytkownika.", true);
     return;
   }
-  if (!newPassword) {
-    setAccountsStatus("Podaj nowe hasło użytkownika.", true);
+  if (!validateNewPassword(newPassword)) {
+    setAccountsStatus("Hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true);
     return;
   }
 
@@ -1929,6 +1979,38 @@ async function loadAirtableConfig() {
   if (isAirtableConfigManager()) await checkAirtableConnection();
 }
 
+function setOwnPasswordStatus(message, isError = false) {
+  if (!ownPasswordStatus) return;
+  ownPasswordStatus.textContent = message;
+  ownPasswordStatus.classList.toggle("error", isError);
+}
+
+async function changeOwnPassword() {
+  const currentPassword = (ownCurrentPasswordInput?.value || "").trim();
+  const newPassword = (ownNewPasswordInput?.value || "").trim();
+  const confirmation = (ownNewPasswordConfirmInput?.value || "").trim();
+  if (!currentPassword) return setOwnPasswordStatus("Podaj obecne hasło.", true);
+  if (newPassword !== confirmation) return setOwnPasswordStatus("Hasła nie są identyczne.", true);
+  if (!validateNewPassword(newPassword)) return setOwnPasswordStatus("Hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true);
+
+  setOwnPasswordStatus("Zapisywanie nowego hasła...");
+  try {
+    const response = await fetch(getAccountsUrl(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "change_own_password", currentPassword, password: newPassword }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    if (ownCurrentPasswordInput) ownCurrentPasswordInput.value = "";
+    if (ownNewPasswordInput) ownNewPasswordInput.value = "";
+    if (ownNewPasswordConfirmInput) ownNewPasswordConfirmInput.value = "";
+    setOwnPasswordStatus("Hasło zostało zmienione.");
+  } catch (error) {
+    setOwnPasswordStatus(`Błąd zmiany hasła: ${error.message}`, true);
+  }
+}
+
 async function logoutSuperAdmin() {
   try {
     await fetch(FAMILIES_STORAGE_URL, {
@@ -1948,7 +2030,7 @@ async function setFamilyAdminPassword() {
   if (!superAdminAuthorized || !editingFamilySlug) return;
   const password = (familyEditAdminPasswordInput?.value || "").trim();
   const confirmation = (familyEditAdminPasswordConfirmInput?.value || "").trim();
-  if (password.length < 12) { setSuperAdminStatus("Hasło musi mieć co najmniej 12 znaków.", true); return; }
+  if (!validateNewPassword(password)) { setSuperAdminStatus("Hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true); return; }
   if (password !== confirmation) { setSuperAdminStatus("Hasła nie są identyczne.", true); return; }
   setSuperAdminStatus("Zapisywanie nowego hasła administratora rodziny…");
   try {
@@ -2393,6 +2475,9 @@ function fillUserSettingsForm() {
   if (macroVisibleDiaryCheckbox) {
     macroVisibleDiaryCheckbox.checked = userSettings.showMacroDiary !== false;
   }
+  if (diaryTabVisibleCheckbox) {
+    diaryTabVisibleCheckbox.checked = userSettings.hideDiary !== true;
+  }
   if (shoppingOwnerVisibleCheckbox) {
     shoppingOwnerVisibleCheckbox.checked = userSettings.showShoppingOwnerInfo !== false;
   }
@@ -2418,6 +2503,7 @@ async function saveUserSettings() {
     macroDisplayMode: macroDisplayModeSelect.value,
     showMacroProducts: macroVisibleProductsCheckbox ? macroVisibleProductsCheckbox.checked : userSettings.showMacroProducts,
     showMacroDiary: macroVisibleDiaryCheckbox ? macroVisibleDiaryCheckbox.checked : userSettings.showMacroDiary,
+    hideDiary: diaryTabVisibleCheckbox ? !diaryTabVisibleCheckbox.checked : userSettings.hideDiary,
     showShoppingOwnerInfo: shoppingOwnerVisibleCheckbox ? shoppingOwnerVisibleCheckbox.checked : userSettings.showShoppingOwnerInfo,
   });
   userViewSettings = normalizeUserViewSettings({
@@ -2431,6 +2517,7 @@ async function saveUserSettings() {
     await saveItems();
     updateSyncTimer();
     renderItems();
+    setActiveTab(activeTab);
     setUserSettingsStatus("Ustawienia zapisane.");
   } catch (error) {
     setUserSettingsStatus(`Błąd zapisu ustawień: ${error.message}`, true);
@@ -2719,7 +2806,7 @@ function renderCategoryGroup(container, category, groupItems, section, startInde
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "category-toggle secondary small";
-  toggle.textContent = collapsed ? "Rozwiń" : "Zwiń";
+  toggle.textContent = collapsed ? "▼" : "▲";
   toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
   toggle.setAttribute("aria-label", `${collapsed ? "Rozwiń" : "Zwiń"} kategorię ${category}`);
   toggle.addEventListener("click", () => {
@@ -3120,20 +3207,6 @@ function createItemRow(item, order, isPurchased, section = "shop") {
     category.textContent = getCategoryLabel(item);
     name.appendChild(category);
 
-    const expandButton = document.createElement("button");
-    expandButton.type = "button";
-    expandButton.className = "all-product-expand-button secondary small";
-    expandButton.textContent = expandedProductActions.has(item.id) ? "⌃" : "⌄";
-    expandButton.title = expandedProductActions.has(item.id) ? "Ukryj akcje produktu" : "Pokaż akcje produktu";
-    expandButton.setAttribute("aria-expanded", expandedProductActions.has(item.id) ? "true" : "false");
-    expandButton.setAttribute("aria-label", expandButton.title);
-    expandButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (expandedProductActions.has(item.id)) expandedProductActions.delete(item.id);
-      else expandedProductActions.add(item.id);
-      renderItems();
-    });
-    name.appendChild(expandButton);
   }
 
   if (isMacroVisibleForSection(section) && (item.nutritionLoading || item.nutrition || item.nutritionError)) {
@@ -3151,6 +3224,23 @@ function createItemRow(item, order, isPurchased, section = "shop") {
   const quantity = document.createElement("div");
   quantity.className = "item-qty";
   quantity.innerHTML = `<div class="item-qty-value">${formatQuantity(item.quantity)}</div><div class="item-unit">${item.unit}</div>`;
+
+  if (section === "all") {
+    const expandButton = document.createElement("button");
+    expandButton.type = "button";
+    expandButton.className = "all-product-expand-button secondary small";
+    expandButton.textContent = expandedProductActions.has(item.id) ? "⌃" : "⌄";
+    expandButton.title = expandedProductActions.has(item.id) ? "Ukryj akcje produktu" : "Pokaż akcje produktu";
+    expandButton.setAttribute("aria-expanded", expandedProductActions.has(item.id) ? "true" : "false");
+    expandButton.setAttribute("aria-label", expandButton.title);
+    expandButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (expandedProductActions.has(item.id)) expandedProductActions.delete(item.id);
+      else expandedProductActions.add(item.id);
+      renderItems();
+    });
+    quantity.appendChild(expandButton);
+  }
 
   const allProductActions = section === "all" ? document.createElement("div") : null;
   if (allProductActions) {
@@ -3689,6 +3779,7 @@ function setActiveTab(tab) {
   localStorage.setItem(getActiveTabStorageKey(), nextTab);
   const canShowAddItemSection = nextTab === "shop" || nextTab === "all";
   tabButtons.forEach((button) => {
+    if (button.dataset.tab === "diary") button.classList.toggle("hidden", userSettings.hideDiary === true);
     const isActive = button.dataset.tab === nextTab;
     button.classList.toggle("active", isActive);
   });
@@ -3909,6 +4000,12 @@ changeFamilyButton?.addEventListener("click", () => {
 });
 familyEditCloseButton?.addEventListener("click", closeFamilyEditModal);
 familyEditCancelButton?.addEventListener("click", closeFamilyEditModal);
+accountEditCloseButton?.addEventListener("click", closeAccountEditModal);
+accountEditCancelButton?.addEventListener("click", closeAccountEditModal);
+accountEditSaveButton?.addEventListener("click", () => void saveAccountEdit());
+accountEditModal?.addEventListener("click", (event) => {
+  if (event.target === accountEditModal) closeAccountEditModal();
+});
 familyEditSaveButton?.addEventListener("click", () => {
   void saveFamilyEdit();
 });
@@ -4000,6 +4097,7 @@ superAdminAirtableTestButton?.addEventListener("click", () => void testSuperAdmi
 superAdminSyncSaveButton?.addEventListener("click", () => void saveSuperAdminSyncSettings());
 superAdminSyncNowButton?.addEventListener("click", () => void runSuperAdminSync());
 familyEditPasswordSaveButton?.addEventListener("click", () => void setFamilyAdminPassword());
+changeOwnPasswordButton?.addEventListener("click", () => void changeOwnPassword());
 superAdminTabButtons.forEach((button) => {
   button.addEventListener("click", () => setActiveSuperAdminTab(button.dataset.superAdminTab || "families"));
   button.addEventListener("keydown", (event) => {
