@@ -1,4 +1,4 @@
-const CACHE_NAME = "shopping-list-shell-v5";
+const CACHE_NAME = "shopping-list-shell-v9";
 const APP_SHELL = [
   "./",
   "./index.html",

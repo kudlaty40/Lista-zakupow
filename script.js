@@ -10,6 +10,7 @@ const superAdminPasswordInput = document.getElementById("super-admin-password");
 const superAdminLoginButton = document.getElementById("super-admin-login-button");
 const superAdminBackButton = document.getElementById("super-admin-back-button");
 const superAdminCloseButton = document.getElementById("super-admin-close-button");
+const superAdminLogoutButton = document.getElementById("super-admin-logout-button");
 const superAdminStatus = document.getElementById("super-admin-status");
 const newFamilyNameInput = document.getElementById("new-family-name");
 const newFamilyAdminUsernameInput = document.getElementById("new-family-admin-username");
@@ -19,7 +20,6 @@ const createFamilyButton = document.getElementById("create-family-button");
 const superAdminOldPasswordInput = document.getElementById("super-admin-old-password");
 const superAdminNewPasswordInput = document.getElementById("super-admin-new-password");
 const changeSuperAdminPasswordButton = document.getElementById("change-super-admin-password-button");
-const superAdminFamilySelect = document.getElementById("super-admin-family-select");
 const superAdminFamilyList = document.getElementById("super-admin-family-list");
 const familyEditModal = document.getElementById("family-edit-modal");
 const familyEditCloseButton = document.getElementById("family-edit-close");
@@ -28,6 +28,9 @@ const familyEditSaveButton = document.getElementById("family-edit-save");
 const familyEditNameInput = document.getElementById("family-edit-name");
 const familyEditAdminUsernameInput = document.getElementById("family-edit-admin-username");
 const familyEditAdminDisplayInput = document.getElementById("family-edit-admin-display");
+const familyEditAdminPasswordInput = document.getElementById("family-edit-admin-password");
+const familyEditAdminPasswordConfirmInput = document.getElementById("family-edit-admin-password-confirm");
+const familyEditPasswordSaveButton = document.getElementById("family-edit-password-save");
 const loginScreen = document.getElementById("login-screen");
 const shopScreen = document.getElementById("shop-screen");
 const loginInput = document.getElementById("login-input");
@@ -73,6 +76,7 @@ const macroVisibleProductsCheckbox = document.getElementById("macro-visible-prod
 const macroVisibleDiaryCheckbox = document.getElementById("macro-visible-diary");
 const shoppingOwnerVisibleCheckbox = document.getElementById("shopping-owner-visible");
 const shoppingCategoryGroupingCheckbox = document.getElementById("shopping-category-grouping");
+const allProductsCategoryGroupingCheckbox = document.getElementById("all-products-category-grouping");
 const shoppingMoveOnSelectionCheckbox = document.getElementById("shopping-move-on-selection");
 const saveUserSettingsButton = document.getElementById("save-user-settings-button");
 const userSettingsStatus = document.getElementById("user-settings-status");
@@ -98,6 +102,29 @@ const syncMinutesInput = document.getElementById("sync-minutes");
 const syncNowButton = document.getElementById("sync-now-button");
 const syncStatus = document.getElementById("sync-status");
 const offlineStatus = document.getElementById("offline-status");
+const superAdminAirtableApiKeyInput = document.getElementById("super-admin-airtable-api-key");
+const superAdminAirtableBaseIdInput = document.getElementById("super-admin-airtable-base-id");
+const superAdminAirtableTableNameInput = document.getElementById("super-admin-airtable-table-name");
+const superAdminAirtableUserFieldInput = document.getElementById("super-admin-airtable-user-field");
+const superAdminAirtableDataFieldInput = document.getElementById("super-admin-airtable-data-field");
+const superAdminAirtableUpdatedFieldInput = document.getElementById("super-admin-airtable-updated-field");
+const superAdminAirtableSaveButton = document.getElementById("super-admin-airtable-save");
+const superAdminAirtableTestButton = document.getElementById("super-admin-airtable-test");
+const superAdminAirtableStatus = document.getElementById("super-admin-airtable-status");
+const superAdminSyncMode = document.getElementById("super-admin-sync-mode");
+const superAdminSyncWeeks = document.getElementById("super-admin-sync-weeks");
+const superAdminSyncDays = document.getElementById("super-admin-sync-days");
+const superAdminSyncHours = document.getElementById("super-admin-sync-hours");
+const superAdminSyncMinutes = document.getElementById("super-admin-sync-minutes");
+const superAdminSyncFamily = document.getElementById("super-admin-sync-family");
+const superAdminSyncSaveButton = document.getElementById("super-admin-sync-save");
+const superAdminSyncNowButton = document.getElementById("super-admin-sync-now");
+const superAdminSyncStatus = document.getElementById("super-admin-sync-status");
+const superAdminTabButtons = document.querySelectorAll(".super-admin-tab");
+const superAdminTabPanels = document.querySelectorAll(".super-admin-tab-panel");
+const superAdminFamilyCount = document.getElementById("super-admin-family-count");
+const superAdminAirtableSummary = document.getElementById("super-admin-airtable-summary");
+const superAdminSyncSummary = document.getElementById("super-admin-sync-summary");
 
 let items = [];
 let activeTab = "shop";
@@ -138,6 +165,8 @@ let dataDirty = false;
 let lastAirtableSyncAt = null;
 let selectedFamily = "";
 let families = [];
+const collapsedCategorySections = new Set();
+const expandedProductActions = new Set();
 let superAdminAuthorized = false;
 let editingFamilySlug = "";
 let serverLastSelectedFamily = "";
@@ -679,12 +708,29 @@ function normalizeSettings(rawSettings) {
 function normalizeUserViewSettings(rawSettings) {
   return {
     groupShoppingByCategory: rawSettings?.groupShoppingByCategory === true,
+    groupAllProductsByCategory: Object.prototype.hasOwnProperty.call(rawSettings || {}, "groupAllProductsByCategory")
+      ? rawSettings.groupAllProductsByCategory === true
+      : true,
     moveOnSelection: rawSettings?.moveOnSelection === true,
   };
 }
 
 function getCategoryLabel(item) {
   return String(item?.category || "").trim() || "Bez kategorii";
+}
+
+function groupItemsByCategory(sourceItems) {
+  const groups = new Map();
+  sourceItems.forEach((item) => {
+    const category = getCategoryLabel(item);
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(item);
+  });
+  return new Map([...groups.entries()].sort(([left], [right]) => {
+    if (left === "Bez kategorii") return 1;
+    if (right === "Bez kategorii") return -1;
+    return left.localeCompare(right, "pl", { sensitivity: "base" });
+  }));
 }
 
 function refreshCategorySuggestions() {
@@ -955,9 +1001,7 @@ function isAdminUser() {
 }
 
 function isAirtableConfigManager() {
-  return isAdminUser()
-    && getActiveFamily() === "polak"
-    && normalizeAccountUsername(currentAccount?.username || currentUser || "") === "bartek";
+  return false;
 }
 
 function setAdminVisibility() {
@@ -968,12 +1012,15 @@ function setAdminVisibility() {
   const canSeeAdmin = isAdminUser();
   adminTools.classList.toggle("hidden", !canSeeAdmin);
 
-  const canManageAirtable = isAirtableConfigManager();
+  const canManageAirtable = false;
   const airtableTab = document.getElementById("admin-tab-airtable");
+  const syncTab = document.getElementById("admin-tab-sync");
   airtableTab?.classList.toggle("hidden", !canManageAirtable);
-  adminAirtablePanel?.classList.toggle("hidden", !canManageAirtable || activeAdminTab !== "airtable");
-  if (!canManageAirtable && activeAdminTab === "airtable") {
-    setActiveAdminTab("sync");
+  syncTab?.classList.add("hidden");
+  adminAirtablePanel?.classList.add("hidden");
+  adminSyncPanel?.classList.add("hidden");
+  if (activeAdminTab === "airtable" || activeAdminTab === "sync") {
+    setActiveAdminTab("accounts");
   }
 }
 
@@ -1027,6 +1074,25 @@ function setSuperAdminStatus(message, isError = false) {
   superAdminStatus.classList.toggle("error", isError);
 }
 
+function setActiveSuperAdminTab(tab) {
+  const active = ["families", "airtable", "sync", "security"].includes(tab) ? tab : "families";
+  superAdminTabButtons.forEach((button) => {
+    const selected = button.dataset.superAdminTab === active;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+    button.tabIndex = selected ? 0 : -1;
+  });
+  superAdminTabPanels.forEach((panel) => {
+    const selected = panel.id === `super-admin-panel-${active}`;
+    panel.classList.toggle("hidden", !selected);
+    panel.hidden = !selected;
+  });
+}
+
+function updateSuperAdminOverview() {
+  if (superAdminFamilyCount) superAdminFamilyCount.textContent = String(Array.isArray(families) ? families.length : 0);
+}
+
 function closeFamilyEditModal() {
   editingFamilySlug = "";
   familyEditModal?.classList.add("hidden");
@@ -1048,6 +1114,8 @@ function openFamilyEditModal(family) {
   if (familyEditAdminDisplayInput) {
     familyEditAdminDisplayInput.value = family?.adminDisplayName || "";
   }
+  if (familyEditAdminPasswordInput) familyEditAdminPasswordInput.value = "";
+  if (familyEditAdminPasswordConfirmInput) familyEditAdminPasswordConfirmInput.value = "";
 
   familyEditModal?.classList.remove("hidden");
 }
@@ -1057,24 +1125,10 @@ function renderSuperAdminFamilyList() {
     return;
   }
 
-  if (superAdminFamilySelect) {
-    superAdminFamilySelect.innerHTML = "";
-    const placeholderOption = document.createElement("option");
-    placeholderOption.value = "";
-    placeholderOption.textContent = "Wybierz rodzinę";
-    superAdminFamilySelect.appendChild(placeholderOption);
-
-    families.forEach((family) => {
-      const option = document.createElement("option");
-      option.value = normalizeFamilySlug(family.slug || "");
-      option.textContent = family.name || family.slug || "";
-      superAdminFamilySelect.appendChild(option);
-    });
-  }
-
   superAdminFamilyList.innerHTML = "";
   if (!Array.isArray(families) || families.length === 0) {
     superAdminFamilyList.innerHTML = "<p>Brak rodzin.</p>";
+    updateSuperAdminOverview();
     return;
   }
 
@@ -1119,6 +1173,7 @@ function renderSuperAdminFamilyList() {
     row.appendChild(editButton);
     superAdminFamilyList.appendChild(row);
   });
+  updateSuperAdminOverview();
 }
 
 function renderFamilySelectOptions() {
@@ -1188,6 +1243,7 @@ function showSuperAdminScreen() {
   superAdminAuthorized = false;
   superAdminLoginBox?.classList.remove("hidden");
   superAdminPanel?.classList.add("hidden");
+  setActiveSuperAdminTab("families");
   setSuperAdminStatus("");
 }
 
@@ -1248,7 +1304,11 @@ async function loginSuperAdmin() {
     superAdminAuthorized = true;
     superAdminLoginBox?.classList.add("hidden");
     superAdminPanel?.classList.remove("hidden");
+    setActiveSuperAdminTab("families");
     setSuperAdminStatus("Zalogowano do panelu administratora globalnego.");
+    renderSuperAdminFamilyList();
+    await loadSuperAdminAirtableConfig();
+    await loadSuperAdminSyncSettings();
   } catch (error) {
     setSuperAdminStatus(error.message || "Błąd logowania super-admina.", true);
   }
@@ -1869,6 +1929,164 @@ async function loadAirtableConfig() {
   if (isAirtableConfigManager()) await checkAirtableConnection();
 }
 
+async function logoutSuperAdmin() {
+  try {
+    await fetch(FAMILIES_STORAGE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "super_admin_logout" }),
+    });
+  } catch {
+    // The local state is cleared even when the network is unavailable.
+  }
+  superAdminAuthorized = false;
+  if (superAdminPasswordInput) superAdminPasswordInput.value = "";
+  showFamilyScreen();
+}
+
+async function setFamilyAdminPassword() {
+  if (!superAdminAuthorized || !editingFamilySlug) return;
+  const password = (familyEditAdminPasswordInput?.value || "").trim();
+  const confirmation = (familyEditAdminPasswordConfirmInput?.value || "").trim();
+  if (password.length < 12) { setSuperAdminStatus("Hasło musi mieć co najmniej 12 znaków.", true); return; }
+  if (password !== confirmation) { setSuperAdminStatus("Hasła nie są identyczne.", true); return; }
+  setSuperAdminStatus("Zapisywanie nowego hasła administratora rodziny…");
+  try {
+    const response = await fetch(FAMILIES_STORAGE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "set_family_admin_password", familySlug: editingFamilySlug, password }) });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    if (familyEditAdminPasswordInput) familyEditAdminPasswordInput.value = "";
+    if (familyEditAdminPasswordConfirmInput) familyEditAdminPasswordConfirmInput.value = "";
+    setSuperAdminStatus("Hasło administratora rodziny zostało zmienione.");
+  } catch (error) { setSuperAdminStatus(`Błąd zmiany hasła: ${error.message}`, true); }
+}
+
+function setSuperAdminAirtableMessage(message, isError = false) {
+  if (!superAdminAirtableStatus) return;
+  superAdminAirtableStatus.textContent = message;
+  superAdminAirtableStatus.classList.toggle("error", isError);
+  if (superAdminAirtableSummary) superAdminAirtableSummary.textContent = isError ? "Błąd" : (message.includes("działa") || message.includes("ustawiona") ? "Gotowe" : "Sprawdzanie…");
+}
+
+function setSuperAdminSyncMessage(message, isError = false) {
+  if (!superAdminSyncStatus) return;
+  superAdminSyncStatus.textContent = message;
+  superAdminSyncStatus.classList.toggle("error", isError);
+  if (superAdminSyncSummary) superAdminSyncSummary.textContent = isError ? "Błąd" : (message.includes("zapisany") || message.includes("wczytany") || message.includes("Zsynchronizowano") ? "Gotowe" : "Sprawdzanie…");
+}
+
+function renderSuperAdminSyncFamilies() {
+  if (!superAdminSyncFamily) return;
+  const selected = superAdminSyncFamily.value;
+  superAdminSyncFamily.innerHTML = "";
+  families.forEach((family) => {
+    const option = document.createElement("option");
+    option.value = normalizeFamilySlug(family.slug || "");
+    option.textContent = family.name || family.slug || "";
+    superAdminSyncFamily.appendChild(option);
+  });
+  if (selected && [...superAdminSyncFamily.options].some((option) => option.value === selected)) superAdminSyncFamily.value = selected;
+}
+
+async function loadSuperAdminAirtableConfig() {
+  if (!superAdminAuthorized) return;
+  setSuperAdminAirtableMessage("Wczytywanie konfiguracji…");
+  try {
+    const response = await fetch("api/airtable-settings.php", { headers: { Accept: "application/json" } });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    const config = payload.config || {};
+    if (superAdminAirtableBaseIdInput) superAdminAirtableBaseIdInput.value = config.base_id || "";
+    if (superAdminAirtableTableNameInput) superAdminAirtableTableNameInput.value = config.table_name || "shopping_list";
+    if (superAdminAirtableUserFieldInput) superAdminAirtableUserFieldInput.value = config.user_field || "user";
+    if (superAdminAirtableDataFieldInput) superAdminAirtableDataFieldInput.value = config.data_field || "data";
+    if (superAdminAirtableUpdatedFieldInput) superAdminAirtableUpdatedFieldInput.value = config.updated_field || "updated_at";
+    setSuperAdminAirtableMessage(config.has_api_key ? "Konfiguracja Airtable jest ustawiona." : "Brak tokenu Airtable.");
+  } catch (error) { setSuperAdminAirtableMessage(`Błąd konfiguracji: ${error.message}`, true); }
+}
+
+async function saveSuperAdminAirtableConfig() {
+  if (!superAdminAuthorized) return;
+  setSuperAdminAirtableMessage("Zapisywanie konfiguracji…");
+  try {
+    const response = await fetch("api/airtable-settings.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      api_key: superAdminAirtableApiKeyInput?.value.trim() || "", base_id: superAdminAirtableBaseIdInput?.value.trim() || "",
+      table_name: superAdminAirtableTableNameInput?.value.trim() || "shopping_list", user_field: superAdminAirtableUserFieldInput?.value.trim() || "user",
+      data_field: superAdminAirtableDataFieldInput?.value.trim() || "data", updated_field: superAdminAirtableUpdatedFieldInput?.value.trim() || "updated_at",
+    }) });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    if (superAdminAirtableApiKeyInput) superAdminAirtableApiKeyInput.value = "";
+    setSuperAdminAirtableMessage("Konfiguracja Airtable została zapisana.");
+    await loadSuperAdminAirtableConfig();
+  } catch (error) { setSuperAdminAirtableMessage(`Błąd zapisu: ${error.message}`, true); }
+}
+
+async function testSuperAdminAirtable() {
+  if (!superAdminAuthorized) return;
+  setSuperAdminAirtableMessage("Testowanie połączenia…");
+  try {
+    const response = await fetch("api/airtable-health.php", { headers: { Accept: "application/json" } });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    setSuperAdminAirtableMessage(payload.connected ? "Połączenie Airtable działa." : (payload.reason || "Airtable nie odpowiada."), !payload.connected);
+  } catch (error) { setSuperAdminAirtableMessage(`Błąd testu: ${error.message}`, true); }
+}
+
+async function loadSuperAdminSyncSettings() {
+  if (!superAdminAuthorized) return;
+  renderSuperAdminSyncFamilies();
+  try {
+    const response = await fetch("api/sync-settings.php", { headers: { Accept: "application/json" } });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    const settings = payload.settings || {};
+    if (superAdminSyncMode) superAdminSyncMode.value = settings.mode || "manual";
+    if (superAdminSyncWeeks) superAdminSyncWeeks.value = String(settings.weeks || 0);
+    if (superAdminSyncDays) superAdminSyncDays.value = String(settings.days || 0);
+    if (superAdminSyncHours) superAdminSyncHours.value = String(settings.hours || 0);
+    if (superAdminSyncMinutes) superAdminSyncMinutes.value = String(settings.minutes ?? 30);
+    setSuperAdminSyncMessage("Globalny harmonogram został wczytany.");
+  } catch (error) { setSuperAdminSyncMessage(`Błąd harmonogramu: ${error.message}`, true); }
+}
+
+async function applyGlobalSyncSettings() {
+  try {
+    const response = await fetch("api/sync-settings.php", { headers: { Accept: "application/json" } });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) return;
+    const settings = payload.settings || {};
+    userSettings = normalizeSettings({ ...userSettings, syncMode: settings.mode, syncWeeks: settings.weeks, syncDays: settings.days, syncHours: settings.hours, syncMinutes: settings.minutes });
+    updateSyncTimer();
+  } catch {
+    // The existing local family settings remain a safe offline fallback.
+  }
+}
+
+async function saveSuperAdminSyncSettings() {
+  if (!superAdminAuthorized) return;
+  try {
+    const response = await fetch("api/sync-settings.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      mode: superAdminSyncMode?.value || "manual", weeks: superAdminSyncWeeks?.value || 0, days: superAdminSyncDays?.value || 0,
+      hours: superAdminSyncHours?.value || 0, minutes: superAdminSyncMinutes?.value || 0,
+    }) });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    setSuperAdminSyncMessage("Globalny harmonogram został zapisany.");
+  } catch (error) { setSuperAdminSyncMessage(`Błąd zapisu harmonogramu: ${error.message}`, true); }
+}
+
+async function runSuperAdminSync() {
+  if (!superAdminAuthorized || !superAdminSyncFamily?.value) { setSuperAdminSyncMessage("Wybierz rodzinę.", true); return; }
+  setSuperAdminSyncMessage("Synchronizacja…");
+  try {
+    const response = await fetch("api/admin-sync.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ family: superAdminSyncFamily.value }) });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    setSuperAdminSyncMessage(`Zsynchronizowano rekordów: ${payload.records ?? 0}.`);
+  } catch (error) { setSuperAdminSyncMessage(`Błąd synchronizacji: ${error.message}`, true); }
+}
+
 async function saveItems() {
   const user = getActiveUser();
   const sharedPayload = buildSharedPayload();
@@ -2181,6 +2399,9 @@ function fillUserSettingsForm() {
   if (shoppingCategoryGroupingCheckbox) {
     shoppingCategoryGroupingCheckbox.checked = userViewSettings.groupShoppingByCategory === true;
   }
+  if (allProductsCategoryGroupingCheckbox) {
+    allProductsCategoryGroupingCheckbox.checked = userViewSettings.groupAllProductsByCategory !== false;
+  }
   if (shoppingMoveOnSelectionCheckbox) {
     shoppingMoveOnSelectionCheckbox.checked = userViewSettings.moveOnSelection === true;
   }
@@ -2201,6 +2422,7 @@ async function saveUserSettings() {
   });
   userViewSettings = normalizeUserViewSettings({
     groupShoppingByCategory: shoppingCategoryGroupingCheckbox ? shoppingCategoryGroupingCheckbox.checked : userViewSettings.groupShoppingByCategory,
+    groupAllProductsByCategory: allProductsCategoryGroupingCheckbox ? allProductsCategoryGroupingCheckbox.checked : userViewSettings.groupAllProductsByCategory,
     moveOnSelection: shoppingMoveOnSelectionCheckbox ? shoppingMoveOnSelectionCheckbox.checked : userViewSettings.moveOnSelection,
   });
 
@@ -2487,6 +2709,31 @@ async function lookupNutritionForDiaryEntry(entry) {
   renderDiaryCard();
 }
 
+function renderCategoryGroup(container, category, groupItems, section, startIndex) {
+  const key = `${section}:${category}`;
+  const collapsed = collapsedCategorySections.has(key);
+  const heading = document.createElement("div");
+  heading.className = "category-heading";
+  const label = document.createElement("span");
+  label.textContent = category;
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "category-toggle secondary small";
+  toggle.textContent = collapsed ? "Rozwiń" : "Zwiń";
+  toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  toggle.setAttribute("aria-label", `${collapsed ? "Rozwiń" : "Zwiń"} kategorię ${category}`);
+  toggle.addEventListener("click", () => {
+    if (collapsed) collapsedCategorySections.delete(key);
+    else collapsedCategorySections.add(key);
+    renderItems();
+  });
+  heading.append(label, toggle);
+  container.appendChild(heading);
+  if (!collapsed) {
+    groupItems.forEach((item, index) => container.appendChild(createItemRow(item, startIndex + index, section === "all", section)));
+  }
+}
+
 function renderItems() {
   const shopping = items.filter((item) => !item.bought);
   const sortedShopping = getSortedShoppingItems(shopping);
@@ -2501,29 +2748,11 @@ function renderItems() {
     if (sortedShopping.length === 0) {
       shopItems.innerHTML = "<p>Brak produktów na liście zakupów. Dodaj produkt poniżej.</p>";
     } else if (userViewSettings.groupShoppingByCategory === true) {
-    const groups = new Map();
-    sortedShopping.forEach((item) => {
-      const category = getCategoryLabel(item);
-      if (!groups.has(category)) {
-        groups.set(category, []);
-      }
-      groups.get(category).push(item);
-    });
-
-    [...groups.keys()]
-      .sort((left, right) => {
-        if (left === "Bez kategorii") return 1;
-        if (right === "Bez kategorii") return -1;
-        return left.localeCompare(right, "pl", { sensitivity: "base" });
-      })
-      .forEach((category) => {
-        const heading = document.createElement("h3");
-        heading.className = "category-heading";
-        heading.textContent = category;
-        shopItems.appendChild(heading);
-        groups.get(category).forEach((item, index) => {
-          shopItems.appendChild(createItemRow(item, index + 1, false, "shop"));
-        });
+      const groups = groupItemsByCategory(sortedShopping);
+      let itemIndex = 1;
+      groups.forEach((group, category) => {
+        renderCategoryGroup(shopItems, category, group, "shop", itemIndex);
+        itemIndex += group.length;
       });
     } else {
       sortedShopping.forEach((item, index) => shopItems.appendChild(createItemRow(item, index + 1, false, "shop")));
@@ -2536,7 +2765,16 @@ function renderItems() {
       allItems.innerHTML = "<p>Brak produktów. Dodaj nowy produkt poniżej.</p>";
     } else {
       const visible = all.slice(0, allProductsLimit);
-      visible.forEach((item, index) => allItems.appendChild(createItemRow(item, index + 1, true, "all")));
+      if (userViewSettings.groupAllProductsByCategory !== false) {
+        const groups = groupItemsByCategory(visible);
+        let itemIndex = 1;
+        groups.forEach((group, category) => {
+          renderCategoryGroup(allItems, category, group, "all", itemIndex);
+          itemIndex += group.length;
+        });
+      } else {
+        visible.forEach((item, index) => allItems.appendChild(createItemRow(item, index + 1, true, "all")));
+      }
       if (visible.length < all.length) {
         const moreButton = document.createElement("button");
         moreButton.type = "button";
@@ -2881,6 +3119,21 @@ function createItemRow(item, order, isPurchased, section = "shop") {
     category.className = "item-category";
     category.textContent = getCategoryLabel(item);
     name.appendChild(category);
+
+    const expandButton = document.createElement("button");
+    expandButton.type = "button";
+    expandButton.className = "all-product-expand-button secondary small";
+    expandButton.textContent = expandedProductActions.has(item.id) ? "⌃" : "⌄";
+    expandButton.title = expandedProductActions.has(item.id) ? "Ukryj akcje produktu" : "Pokaż akcje produktu";
+    expandButton.setAttribute("aria-expanded", expandedProductActions.has(item.id) ? "true" : "false");
+    expandButton.setAttribute("aria-label", expandButton.title);
+    expandButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (expandedProductActions.has(item.id)) expandedProductActions.delete(item.id);
+      else expandedProductActions.add(item.id);
+      renderItems();
+    });
+    name.appendChild(expandButton);
   }
 
   if (isMacroVisibleForSection(section) && (item.nutritionLoading || item.nutrition || item.nutritionError)) {
@@ -2901,7 +3154,7 @@ function createItemRow(item, order, isPurchased, section = "shop") {
 
   const allProductActions = section === "all" ? document.createElement("div") : null;
   if (allProductActions) {
-    allProductActions.className = "all-product-actions";
+    allProductActions.className = `all-product-actions${expandedProductActions.has(item.id) ? " expanded" : ""}`;
   }
 
   const appendProductAction = (button) => {
@@ -3596,9 +3849,12 @@ function showShopScreen() {
   setActiveTab(getStoredActiveTab());
   updateSyncTimer();
   void checkAirtableConnection();
+  void applyGlobalSyncSettings();
 }
 
 function showLoginScreen() {
+  collapsedCategorySections.clear();
+  expandedProductActions.clear();
   familyScreen?.classList.add("hidden");
   superAdminScreen?.classList.add("hidden");
   loginScreen.classList.remove("hidden");
@@ -3635,6 +3891,9 @@ superAdminBackButton?.addEventListener("click", () => {
 superAdminCloseButton?.addEventListener("click", () => {
   showFamilyScreen();
 });
+superAdminLogoutButton?.addEventListener("click", () => {
+  void logoutSuperAdmin();
+});
 superAdminLoginButton?.addEventListener("click", () => {
   void loginSuperAdmin();
 });
@@ -3658,20 +3917,6 @@ familyEditModal?.addEventListener("click", (event) => {
     closeFamilyEditModal();
   }
 });
-superAdminFamilySelect?.addEventListener("change", () => {
-  const selectedSlug = normalizeFamilySlug(superAdminFamilySelect.value || "");
-  if (!selectedSlug) {
-    return;
-  }
-
-  const family = families.find((entry) => normalizeFamilySlug(entry.slug) === selectedSlug);
-  if (family) {
-    openFamilyEditModal(family);
-  }
-
-  superAdminFamilySelect.value = "";
-});
-
 loginButton.addEventListener("click", () => {
   void attemptLogin();
 });
@@ -3749,6 +3994,26 @@ syncMinutesInput?.addEventListener("change", () => {
 });
 syncNowButton?.addEventListener("click", () => {
   void syncToAirtable(true);
+});
+superAdminAirtableSaveButton?.addEventListener("click", () => void saveSuperAdminAirtableConfig());
+superAdminAirtableTestButton?.addEventListener("click", () => void testSuperAdminAirtable());
+superAdminSyncSaveButton?.addEventListener("click", () => void saveSuperAdminSyncSettings());
+superAdminSyncNowButton?.addEventListener("click", () => void runSuperAdminSync());
+familyEditPasswordSaveButton?.addEventListener("click", () => void setFamilyAdminPassword());
+superAdminTabButtons.forEach((button) => {
+  button.addEventListener("click", () => setActiveSuperAdminTab(button.dataset.superAdminTab || "families"));
+  button.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    const buttons = [...superAdminTabButtons];
+    const currentIndex = buttons.indexOf(button);
+    const nextIndex = event.key === "ArrowRight"
+      ? (currentIndex + 1) % buttons.length
+      : (currentIndex - 1 + buttons.length) % buttons.length;
+    const next = buttons[nextIndex];
+    setActiveSuperAdminTab(next.dataset.superAdminTab || "families");
+    next.focus();
+  });
 });
 accountsLoadButton?.addEventListener("click", () => {
   void loadAccounts();

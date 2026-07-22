@@ -44,57 +44,88 @@
       </div>
 
       <div id="super-admin-panel" class="hidden">
-        <div class="panel-header">
-          <h2>Dodaj nową rodzinę</h2>
+        <div class="super-admin-toolbar">
+          <div>
+            <h2>Centrum zarządzania</h2>
+            <p class="panel-note">Narzędzia administratora globalnego</p>
+          </div>
+          <button id="super-admin-logout-button" type="button" class="secondary">Wyloguj</button>
         </div>
-        <div class="admin-config-grid">
-          <label class="field-name">
-            Nazwa rodziny
-            <input id="new-family-name" type="text" placeholder="np. Rodzina Kowalskich" />
-          </label>
-          <label class="field-name">
-            Login pierwszego administratora rodziny
-            <input id="new-family-admin-username" type="text" placeholder="np. bartek" />
-          </label>
-          <label class="field-name">
-            Hasło pierwszego administratora rodziny
-            <input id="new-family-admin-password" type="password" placeholder="Hasło" />
-          </label>
-          <label class="field-name">
-            Nazwa wyświetlana pierwszego administratora
-            <input id="new-family-admin-display" type="text" placeholder="np. Bartek" />
-          </label>
-        </div>
-        <div class="admin-actions">
-          <button id="create-family-button" type="button">Utwórz rodzinę</button>
+        <div class="super-admin-overview" aria-label="Podsumowanie stanu systemu">
+          <div class="super-admin-overview-item"><span class="overview-label">Rodziny</span><strong id="super-admin-family-count">—</strong></div>
+          <div class="super-admin-overview-item"><span class="overview-label">Airtable</span><strong id="super-admin-airtable-summary">Nie sprawdzono</strong></div>
+          <div class="super-admin-overview-item"><span class="overview-label">Synchronizacja</span><strong id="super-admin-sync-summary">Nie sprawdzono</strong></div>
         </div>
 
-        <div class="panel-header">
-          <h2>Lista rodzin</h2>
+        <div class="super-admin-tabs" role="tablist" aria-label="Narzędzia administratora globalnego">
+          <button class="super-admin-tab active" id="super-admin-tab-families" type="button" role="tab" aria-selected="true" aria-controls="super-admin-panel-families" data-super-admin-tab="families">👨‍👩‍👧 Rodziny</button>
+          <button class="super-admin-tab" id="super-admin-tab-airtable" type="button" role="tab" aria-selected="false" aria-controls="super-admin-panel-airtable" data-super-admin-tab="airtable">🔗 Airtable</button>
+          <button class="super-admin-tab" id="super-admin-tab-sync" type="button" role="tab" aria-selected="false" aria-controls="super-admin-panel-sync" data-super-admin-tab="sync">↻ Synchronizacja</button>
+          <button class="super-admin-tab" id="super-admin-tab-security" type="button" role="tab" aria-selected="false" aria-controls="super-admin-panel-security" data-super-admin-tab="security">🔒 Bezpieczeństwo</button>
         </div>
-        <label class="field-name">
-          Wybierz rodzinę do edycji
-          <select id="super-admin-family-select"></select>
-        </label>
-        <div id="super-admin-family-list" class="items"></div>
 
-        <div class="panel-header">
-          <h2>Zmień hasło admina globalnego</h2>
-        </div>
-        <div class="admin-config-grid">
-          <label class="field-name">
-            Obecne hasło
-            <input id="super-admin-old-password" type="password" />
-          </label>
-          <label class="field-name">
-            Nowe hasło
-            <input id="super-admin-new-password" type="password" />
-          </label>
-        </div>
-        <div class="admin-actions">
-          <button id="change-super-admin-password-button" type="button" class="secondary">Zmień hasło</button>
-          <button id="super-admin-close-button" type="button" class="secondary">Zamknij</button>
-        </div>
+        <section id="super-admin-panel-families" class="super-admin-tab-panel" role="tabpanel" aria-labelledby="super-admin-tab-families">
+          <div class="super-admin-card-grid">
+            <article class="super-admin-card super-admin-card--families super-admin-card--wide">
+              <div class="super-admin-card-header"><span class="super-admin-card-icon">👨‍👩‍👧</span><div><h2>Dodaj nową rodzinę</h2><p>Utwórz rodzinę i jej pierwsze konto administracyjne.</p></div></div>
+              <div class="admin-config-grid">
+                <label class="field-name">Nazwa rodziny<input id="new-family-name" type="text" placeholder="np. Rodzina Kowalskich" /></label>
+                <label class="field-name">Login pierwszego administratora<input id="new-family-admin-username" type="text" placeholder="np. bartek" /></label>
+                <label class="field-name">Hasło pierwszego administratora<input id="new-family-admin-password" type="password" placeholder="Hasło" /></label>
+                <label class="field-name">Nazwa wyświetlana administratora<input id="new-family-admin-display" type="text" placeholder="np. Bartek" /></label>
+              </div>
+              <div class="admin-actions"><button id="create-family-button" type="button">Utwórz rodzinę</button></div>
+            </article>
+            <article class="super-admin-card super-admin-card--families super-admin-card--wide">
+              <div class="super-admin-card-header"><span class="super-admin-card-icon">📋</span><div><h2>Lista rodzin</h2><p>Wybierz rodzinę, aby zmienić jej dane lub hasło administratora.</p></div></div>
+              <div id="super-admin-family-list" class="items"></div>
+            </article>
+          </div>
+        </section>
+
+        <section id="super-admin-panel-airtable" class="super-admin-tab-panel hidden" role="tabpanel" aria-labelledby="super-admin-tab-airtable" hidden>
+          <article class="super-admin-card super-admin-card--airtable">
+            <div class="super-admin-card-header"><span class="super-admin-card-icon">🔗</span><div><h2>Konfiguracja Airtable</h2><p>Dostęp wyłącznie dla administratora globalnego. Token nie jest wyświetlany ani zwracany przez API.</p></div></div>
+            <div class="admin-config-grid">
+              <label class="field-name">Token API<input id="super-admin-airtable-api-key" type="password" autocomplete="new-password" placeholder="pozostaw puste, aby zachować obecny" /></label>
+              <label class="field-name">Base ID<input id="super-admin-airtable-base-id" type="text" /></label>
+              <label class="field-name">Nazwa tabeli<input id="super-admin-airtable-table-name" type="text" /></label>
+              <label class="field-name">Pole użytkownika<input id="super-admin-airtable-user-field" type="text" /></label>
+              <label class="field-name">Pole danych<input id="super-admin-airtable-data-field" type="text" /></label>
+              <label class="field-name">Pole aktualizacji<input id="super-admin-airtable-updated-field" type="text" /></label>
+            </div>
+            <div class="admin-actions"><button id="super-admin-airtable-save" type="button">Zapisz konfigurację</button><button id="super-admin-airtable-test" type="button" class="secondary">Test połączenia</button></div>
+            <p id="super-admin-airtable-status" class="panel-note" role="status" aria-live="polite"></p>
+          </article>
+        </section>
+
+        <section id="super-admin-panel-sync" class="super-admin-tab-panel hidden" role="tabpanel" aria-labelledby="super-admin-tab-sync" hidden>
+          <article class="super-admin-card super-admin-card--sync">
+            <div class="super-admin-card-header"><span class="super-admin-card-icon">↻</span><div><h2>Globalna synchronizacja</h2><p>Jedno ustawienie obowiązuje wszystkie rodziny. Automatyczna synchronizacja działa na aktywnych urządzeniach PWA.</p></div></div>
+            <div class="admin-config-grid">
+              <label class="field-name">Tryb<select id="super-admin-sync-mode"><option value="manual">Ręczny</option><option value="auto">Automatyczny</option></select></label>
+              <label class="field-qty">Tygodnie<input id="super-admin-sync-weeks" type="number" min="0" max="52" value="0" /></label>
+              <label class="field-qty">Dni<input id="super-admin-sync-days" type="number" min="0" max="31" value="0" /></label>
+              <label class="field-qty">Godziny<input id="super-admin-sync-hours" type="number" min="0" max="23" value="0" /></label>
+              <label class="field-qty">Minuty<input id="super-admin-sync-minutes" type="number" min="0" max="59" value="30" /></label>
+              <label class="field-name">Rodzina do synchronizacji<select id="super-admin-sync-family"></select></label>
+            </div>
+            <div class="admin-actions"><button id="super-admin-sync-save" type="button">Zapisz harmonogram</button><button id="super-admin-sync-now" type="button" class="secondary">Wyślij teraz</button></div>
+            <p id="super-admin-sync-status" class="panel-note" role="status" aria-live="polite"></p>
+          </article>
+        </section>
+
+        <section id="super-admin-panel-security" class="super-admin-tab-panel hidden" role="tabpanel" aria-labelledby="super-admin-tab-security" hidden>
+          <article class="super-admin-card super-admin-card--security">
+            <div class="super-admin-card-header"><span class="super-admin-card-icon">🔒</span><div><h2>Zmień hasło admina globalnego</h2><p>Regularnie aktualizuj hasło i nie używaj go w innych usługach.</p></div></div>
+            <div class="admin-config-grid">
+              <label class="field-name">Obecne hasło<input id="super-admin-old-password" type="password" /></label>
+              <label class="field-name">Nowe hasło<input id="super-admin-new-password" type="password" /></label>
+            </div>
+            <div class="admin-actions"><button id="change-super-admin-password-button" type="button">Zmień hasło</button><button id="super-admin-close-button" type="button" class="secondary">Zamknij panel</button></div>
+            <p class="panel-note">Sesja administratora globalnego jest wymagana do każdej operacji zapisu.</p>
+          </article>
+        </section>
       </div>
       <p id="super-admin-status" class="panel-note"></p>
     </div>
@@ -118,9 +149,18 @@
             Nazwa wyświetlana administratora
             <input id="family-edit-admin-display" type="text" />
           </label>
+          <label class="field-name">
+            Nowe hasło administratora rodziny
+            <input id="family-edit-admin-password" type="password" autocomplete="new-password" />
+          </label>
+          <label class="field-name">
+            Powtórz nowe hasło
+            <input id="family-edit-admin-password-confirm" type="password" autocomplete="new-password" />
+          </label>
         </div>
         <div class="admin-actions">
           <button id="family-edit-save" type="button">Zapisz zmiany</button>
+          <button id="family-edit-password-save" type="button" class="secondary">Nadaj nowe hasło</button>
           <button id="family-edit-cancel" type="button" class="secondary">Anuluj</button>
         </div>
       </div>
@@ -223,41 +263,32 @@
         <div class="panel-header">
           <h2>Ustawienia użytkownika</h2>
         </div>
-        <p class="panel-note">Wybierz, jak wyświetlać makro w aplikacji.</p>
+        <p class="panel-note">Ustawienia są zapisywane osobno dla każdego konta.</p>
 
-        <div class="settings-grid">
-          <label class="field-name">
-            Tryb wyświetlania makro
-            <select id="macro-display-mode">
-              <option value="per100g">Na 100 g produktu</option>
-              <option value="perAmount">Na ilość oznaczoną przy produkcie</option>
-            </select>
-          </label>
-          <label class="settings-toggle">
-            <input id="macro-visible-products" type="checkbox" />
-            Pokazuj makro przy produktach
-          </label>
-          <label class="settings-toggle">
-            <input id="macro-visible-diary" type="checkbox" checked />
-            Pokazuj makro na karcie "Moja dieta"
-          </label>
-          <label class="settings-toggle">
-            <input id="shopping-owner-visible" type="checkbox" checked />
-            Pokazuj oznaczenie osoby dodającej/przenoszącej produkt na liście zakupów
-          </label>
-          <label class="settings-toggle">
-            <input id="shopping-category-grouping" type="checkbox" />
-            Grupuj listę zakupów według kategorii
-          </label>
-          <label class="settings-toggle">
-            <input id="shopping-move-on-selection" type="checkbox" />
-            Przenoś produkt od razu po zaznaczeniu
-          </label>
+        <div class="settings-card-grid">
+          <article class="settings-card settings-card--nutrition">
+            <div class="settings-card-header"><span class="settings-card-icon">🥗</span><div><h3>Makro i odżywianie</h3><p>Wybierz sposób prezentowania wartości odżywczych.</p></div></div>
+            <div class="settings-grid">
+              <label class="field-name">Tryb wyświetlania makro<select id="macro-display-mode"><option value="per100g">Na 100 g produktu</option><option value="perAmount">Na ilość oznaczoną przy produkcie</option></select></label>
+              <label class="settings-toggle"><input id="macro-visible-products" type="checkbox" />Pokazuj makro przy produktach</label>
+              <label class="settings-toggle"><input id="macro-visible-diary" type="checkbox" checked />Pokazuj makro na karcie „Moja dieta”</label>
+            </div>
+          </article>
+          <article class="settings-card settings-card--shopping">
+            <div class="settings-card-header"><span class="settings-card-icon">🛒</span><div><h3>Lista zakupów</h3><p>Organizacja listy i zachowanie produktów podczas zakupów.</p></div></div>
+            <div class="settings-grid">
+              <label class="settings-toggle"><input id="shopping-owner-visible" type="checkbox" checked />Pokazuj osobę dodającą/przenoszącą produkt</label>
+              <label class="settings-toggle"><input id="shopping-category-grouping" type="checkbox" />Grupuj listę zakupów według kategorii</label>
+              <label class="settings-toggle"><input id="shopping-move-on-selection" type="checkbox" />Przenoś produkt od razu po zaznaczeniu</label>
+            </div>
+          </article>
+          <article class="settings-card settings-card--products">
+            <div class="settings-card-header"><span class="settings-card-icon">📦</span><div><h3>Widok produktów</h3><p>Ułatw sobie przeglądanie dużej liczby produktów.</p></div></div>
+            <label class="settings-toggle"><input id="all-products-category-grouping" type="checkbox" checked />Grupuj „Wszystkie produkty” według kategorii</label>
+          </article>
         </div>
 
-        <div class="admin-actions">
-          <button id="save-user-settings-button" type="button">Zapisz ustawienia</button>
-        </div>
+        <div class="admin-actions"><button id="save-user-settings-button" type="button">Zapisz ustawienia</button></div>
         <p id="user-settings-status" class="panel-note"></p>
         <div id="admin-tools" class="admin-tools hidden">
           <div class="panel-header">

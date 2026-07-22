@@ -244,7 +244,50 @@ if ($action === 'set_last_selected_family') {
     exit;
 }
 
+if ($action === 'super_admin_logout') {
+    appStartSession();
+    $_SESSION = [];
+    if (ini_get('session.use_cookies')) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], (bool) $params['secure'], (bool) $params['httponly']);
+    }
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_destroy();
+    }
+    echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 appRequireSuperAdmin();
+
+if ($action === 'set_family_admin_password') {
+    $familySlug = normalizeFamilySlug($payload['familySlug'] ?? '');
+    $newPassword = trim((string) ($payload['password'] ?? ''));
+    if ($familySlug === '' || strlen($newPassword) < 12) {
+        jsonError(400, 'Wybierz rodzinę i podaj hasło o długości co najmniej 12 znaków.');
+    }
+    $familyDir = $storageDir . '/families/' . $familySlug;
+    $accountsFile = $familyDir . '/user-accounts.json';
+    $accounts = readJsonFile($accountsFile, []);
+    if (!is_array($accounts) || !$accounts) jsonError(404, 'Nie znaleziono kont rodziny.');
+    $adminUsername = '';
+    foreach ($index['families'] as $family) {
+        if (($family['slug'] ?? '') === $familySlug) { $adminUsername = (string) ($family['adminUsername'] ?? ''); break; }
+    }
+    $position = -1;
+    foreach ($accounts as $i => $account) {
+        if ($adminUsername !== '' && ($account['username'] ?? '') === $adminUsername) { $position = $i; break; }
+        if ($position < 0 && ($account['isAdmin'] ?? false) === true) $position = $i;
+    }
+    if ($position < 0) jsonError(404, 'Nie znaleziono administratora rodziny.');
+    appBackupBeforeMutation('family-admin-password');
+    $accounts[$position]['password'] = appPasswordHash($newPassword);
+    if (!appAtomicWrite($accountsFile, json_encode($accounts, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))) {
+        jsonError(500, 'Nie udało się zapisać nowego hasła.');
+    }
+    echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 if ($action === 'change_super_admin_password') {
     $oldPassword = trim((string) ($payload['oldPassword'] ?? ''));
