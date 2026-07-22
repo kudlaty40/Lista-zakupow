@@ -42,3 +42,7 @@ Wdrożono poprawione wyrównanie przycisku wylogowania na telefonach, trwałe st
 ### Stałe wyrównanie strzałek produktów
 
 Kolumnę ilości uzupełniono o osobny wrapper ilości i jednostki oraz stałe miejsce na strzałkę. Strzałka jest teraz rysowana grubym obramowaniem CSS, a akcje produktów są rozmieszczane w stałej siatce. Wersję cache PWA zwiększono do `v15`.
+
+### Ujednolicenie przycisku strzałki
+
+Przycisk rozwijania otrzymał rozmiar 44×44 px, taki sam jak pozostałe akcje produktu, pastelowe tło, zaokrąglenie 14 px i grubszą ikonę chevron bez ręcznego przesuwania. Wersję cache PWA zwiększono do `v16`.

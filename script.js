@@ -3238,7 +3238,7 @@ function createItemRow(item, order, isPurchased, section = "shop") {
   if (section === "all") {
     const expandButton = document.createElement("button");
     expandButton.type = "button";
-    expandButton.className = "all-product-expand-button secondary small";
+    expandButton.className = "all-product-expand-button";
     const isExpanded = expandedProductActions.has(item.id);
     expandButton.title = isExpanded ? "Ukryj akcje produktu" : "Pokaż akcje produktu";
     expandButton.setAttribute("aria-expanded", isExpanded ? "true" : "false");

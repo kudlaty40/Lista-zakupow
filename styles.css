@@ -579,29 +579,37 @@ button.secondary.small {
 
 .all-product-expand-button {
   position: static;
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   margin-left: 4px;
-  border-radius: 11px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(79, 70, 229, 0.12);
+  color: var(--primary-strong);
   display: inline-grid;
   place-items: center;
   line-height: 1;
+}
+
+.all-product-expand-button:hover,
+.all-product-expand-button:focus {
+  background: rgba(79, 70, 229, 0.2);
 }
 
 .all-product-expand-button::before {
   content: "";
   width: 8px;
   height: 8px;
-  border-right: 2.5px solid currentColor;
-  border-bottom: 2.5px solid currentColor;
-  transform: translateY(-2px) rotate(45deg);
+  border-right: 3px solid currentColor;
+  border-bottom: 3px solid currentColor;
+  transform: rotate(45deg);
   transition: transform 0.16s ease;
 }
 
 .all-product-expand-button[aria-expanded="true"]::before {
-  transform: translateY(2px) rotate(225deg);
+  transform: rotate(225deg);
 }
 
 .item-edit-button {
@@ -636,7 +644,7 @@ button.secondary.small {
   width: 104px;
   min-width: 104px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center;
   gap: 8px;
 }

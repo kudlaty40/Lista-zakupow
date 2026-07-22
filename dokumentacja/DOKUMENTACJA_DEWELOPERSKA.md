@@ -9,7 +9,7 @@ Aplikacja jest lekką aplikacją PHP/JavaScript działającą z Apache. `index.h
 - `index.html` — struktura widoków logowania, list, ustawień i paneli administracyjnych.
 - `script.js` — stan klienta, renderowanie, IndexedDB/localStorage, kolejka offline, wywołania API i synchronizacja.
 - `styles.css` — układ responsywny, karty, kategorie i akcje produktów.
-- `sw.js` — cache zasobów PWA; po zmianach interfejsu zwiększ wersję cache (aktualnie `v15`).
+- `sw.js` — cache zasobów PWA; po zmianach interfejsu zwiększ wersję cache (aktualnie `v16`).
 - `api/security.php` — sesje, autoryzacja, hashowanie i wspólne odpowiedzi JSON.
 - `api/families.php` — rodziny, superadministrator i operacje administracyjne.
 - `api/user-accounts.php` — konta rodziny, role, edycja kont i `change_own_password`.
@@ -30,7 +30,7 @@ Widoczność karty diety jest częścią ustawień rodziny/użytkownika (`hideDi
 
 Klient zapisuje stan lokalny w IndexedDB oraz utrzymuje kolejkę operacji. Po odzyskaniu sieci wykonuje zapis do endpointu magazynu, a następnie synchronizację Airtable, jeśli jest skonfigurowana. Globalny harmonogram odczytuje klient PWA; jego zmiana jest dostępna wyłącznie superadministratorowi.
 
-W mobilnym nagłówku `.topbar` używa siatki z elastyczną kolumną tytułu i stałą kolumną przycisku wylogowania. Akcje produktu są renderowane w osobnym wierszu. Ilość i jednostka są opakowane w `.item-qty-label`, a `.all-product-row .item-qty` ma stałą szerokość. Strzałka rozwijania jest rysowana przez pseudo-element CSS i zmienia kierunek na podstawie `aria-expanded`. Selektor `.all-product-actions` używa stałej siatki kolumn, aby wyrównać wszystkie przyciski.
+W mobilnym nagłówku `.topbar` używa siatki z elastyczną kolumną tytułu i stałą kolumną przycisku wylogowania. Akcje produktu są renderowane w osobnym wierszu. Ilość i jednostka są opakowane w `.item-qty-label`, a `.all-product-row .item-qty` ma stałą szerokość. Strzałka rozwijania jest rysowana przez pseudo-element CSS, ma taki sam rozmiar i zaokrąglenie jak akcje produktu oraz zmienia kierunek na podstawie `aria-expanded`. Selektor `.all-product-actions` używa stałej siatki kolumn, aby wyrównać wszystkie przyciski.
 
 ## Airtable
 
