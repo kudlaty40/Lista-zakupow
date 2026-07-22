@@ -34,3 +34,7 @@ Utworzono publiczne repozytorium `Lista-zakupow` bez starej historii i bez danyc
 ### Dokumentacja
 
 Od tej pory każdą istotną zmianę funkcjonalną, bezpieczeństwa, FTP lub GitHub należy dopisać do właściwej sekcji tego rejestru. Wpis powinien opisywać cel, środowisko, wynik i ewentualny rollback, bez sekretów.
+
+### Ostatnie poprawki interfejsu mobilnego i produktów
+
+Wdrożono poprawione wyrównanie przycisku wylogowania na telefonach, trwałe stosowanie ustawienia ukrywania karty „Moja dieta” po logowaniu i odświeżeniu oraz cache PWA `v14`. W widoku „Wszystkie produkty” zastąpiono cienkie znaki rozwijania symbolami `▾`/`▴` i ujednolicono rozmiar, kształt oraz wyrównanie przycisków akcji.

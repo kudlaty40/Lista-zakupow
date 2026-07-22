@@ -14,6 +14,8 @@ Zmiany są zapisywane lokalnie, a po odzyskaniu połączenia synchronizowane z s
 
 Zakładka **Wszystkie produkty** zawiera katalog produktów rodziny. Strzałka przy ilości i jednostce rozwija dodatkowe akcje produktu, między innymi zdjęcie, wartości odżywcze, edycję i trwałe usunięcie. Akcje pojawiają się w wierszu poniżej. Trwałe usunięcie wymaga jednego potwierdzenia i nie można go cofnąć.
 
+Strzałka `▾` oznacza zwinięte akcje, a `▴` rozwinięte. Przyciski akcji mają jednolity rozmiar i kształt, dzięki czemu łatwiej obsługiwać je na telefonie.
+
 ## Zdjęcia i dieta
 
 Zdjęcia są dodawane z poziomu akcji produktu. Zakładka **Moja dieta** pozwala prowadzić dziennik oraz zapisywać makroskładniki. Użytkownik może ukryć kartę diety w **Ustawieniach**; ukrycie nie usuwa zapisanych danych.
@@ -22,6 +24,8 @@ Zdjęcia są dodawane z poziomu akcji produktu. Zakładka **Moja dieta** pozwala
 
 Ustawienia są podzielone na karty. Można tam zmienić preferencje listy, widoku produktów i widoczności diety. W karcie **Zmiana hasła** podaj obecne hasło oraz nowe hasło dwa razy. Nowe hasło musi mieć co najmniej 8 znaków, cyfrę i znak specjalny.
 
+Jeśli karta **Moja dieta** jest wyłączona, nie pojawi się po zalogowaniu ani po odświeżeniu. Ustawienie jest pobierane razem z danymi konta.
+
 ## Administrator rodziny
 
 Administrator rodziny może zarządzać kontami własnej rodziny, rolami administratorów i produktami. Nie ma dostępu do globalnej konfiguracji Airtable ani synchronizacji superadministratora.
@@ -29,6 +33,8 @@ Administrator rodziny może zarządzać kontami własnej rodziny, rolami adminis
 ## PWA i synchronizacja
 
 Aplikację można dodać do ekranu głównego telefonu. Service worker przechowuje podstawowe pliki interfejsu, a dane robocze są buforowane lokalnie. Po powrocie internetu aplikacja próbuje wysłać oczekujące zmiany. Nie usuwaj danych przeglądarki, jeśli urządzenie nie wykonało jeszcze synchronizacji.
+
+Na telefonie przycisk **Wyloguj** znajduje się w prawej części nagłówka.
 
 ## Gdy coś nie działa
 

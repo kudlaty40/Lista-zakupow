@@ -9,7 +9,7 @@ Aplikacja jest lekką aplikacją PHP/JavaScript działającą z Apache. `index.h
 - `index.html` — struktura widoków logowania, list, ustawień i paneli administracyjnych.
 - `script.js` — stan klienta, renderowanie, IndexedDB/localStorage, kolejka offline, wywołania API i synchronizacja.
 - `styles.css` — układ responsywny, karty, kategorie i akcje produktów.
-- `sw.js` — cache zasobów PWA; po zmianach interfejsu zwiększ wersję cache.
+- `sw.js` — cache zasobów PWA; po zmianach interfejsu zwiększ wersję cache (aktualnie `v14`).
 - `api/security.php` — sesje, autoryzacja, hashowanie i wspólne odpowiedzi JSON.
 - `api/families.php` — rodziny, superadministrator i operacje administracyjne.
 - `api/user-accounts.php` — konta rodziny, role, edycja kont i `change_own_password`.
@@ -24,9 +24,13 @@ Każde żądanie chronionego endpointu musi sprawdzić sesję, rodzinę i uprawn
 
 Ustawienia widoku są przechowywane per konto w `viewSettings`. Grupowanie listy i grupowanie wszystkich produktów są niezależne; brak nowego pola oznacza wartość domyślną zgodną z kodem klienta.
 
+Widoczność karty diety jest częścią ustawień rodziny/użytkownika (`hideDiary`). Klient blokuje wejście do widoku `diary`, dopóki ustawienia nie zostaną wczytane, a następnie ponownie stosuje widoczność po odczycie cache i serwera. Zapobiega to chwilowemu pojawianiu się karty po logowaniu.
+
 ## Tryb offline i synchronizacja
 
 Klient zapisuje stan lokalny w IndexedDB oraz utrzymuje kolejkę operacji. Po odzyskaniu sieci wykonuje zapis do endpointu magazynu, a następnie synchronizację Airtable, jeśli jest skonfigurowana. Globalny harmonogram odczytuje klient PWA; jego zmiana jest dostępna wyłącznie superadministratorowi.
+
+W mobilnym nagłówku `.topbar` używa siatki z elastyczną kolumną tytułu i stałą kolumną przycisku wylogowania. Akcje produktu są renderowane w osobnym wierszu. Strzałka rozwijania używa symboli `▾`/`▴`, a selektor `.all-product-actions` ujednolica rozmiar i wyrównanie wszystkich przycisków.
 
 ## Airtable
 
