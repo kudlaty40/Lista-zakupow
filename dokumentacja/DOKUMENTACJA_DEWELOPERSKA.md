@@ -9,7 +9,7 @@ Aplikacja jest lekką aplikacją PHP/JavaScript działającą z Apache. `index.h
 - `index.html` — struktura widoków logowania, list, ustawień i paneli administracyjnych.
 - `script.js` — stan klienta, renderowanie, IndexedDB/localStorage, kolejka offline, wywołania API i synchronizacja.
 - `styles.css` — układ responsywny, karty, kategorie i akcje produktów.
-- `sw.js` — cache zasobów PWA; po zmianach interfejsu zwiększ wersję cache (aktualnie `v16`).
+- `sw.js` — cache zasobów PWA; po zmianach interfejsu zwiększ wersję cache (aktualnie `v17`).
 - `api/security.php` — sesje, autoryzacja, hashowanie i wspólne odpowiedzi JSON.
 - `api/families.php` — rodziny, superadministrator i operacje administracyjne.
 - `api/user-accounts.php` — konta rodziny, role, edycja kont i `change_own_password`.

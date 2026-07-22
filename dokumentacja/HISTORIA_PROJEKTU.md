@@ -46,3 +46,7 @@ Kolumnę ilości uzupełniono o osobny wrapper ilości i jednostki oraz stałe m
 ### Ujednolicenie przycisku strzałki
 
 Przycisk rozwijania otrzymał rozmiar 44×44 px, taki sam jak pozostałe akcje produktu, pastelowe tło, zaokrąglenie 14 px i grubszą ikonę chevron bez ręcznego przesuwania. Wersję cache PWA zwiększono do `v16`.
+
+### Ujednolicenie pola nazwy produktu
+
+Pole nazwy w formularzu edycji otrzymało jawny typ `text`, dzięki czemu korzysta z tych samych stylów aplikacji co ilość i kategoria. Wersję cache PWA zwiększono do `v17`.

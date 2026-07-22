@@ -3693,6 +3693,7 @@ function openProductEditor(item) {
     return control;
   };
   const nameInput = createField("Nazwa", document.createElement("input"));
+  nameInput.type = "text";
   nameInput.value = item.name || "";
   const quantityInput = createField("Ilość", document.createElement("input"));
   quantityInput.type = "number";
