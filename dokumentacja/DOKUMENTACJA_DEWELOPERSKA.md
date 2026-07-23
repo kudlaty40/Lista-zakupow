@@ -117,6 +117,14 @@ Endpoint `families.php` udostępnia chronioną akcję `super_admin_status`. Rese
 
 `index.html` ładuje `script.js?v=28`, a service worker używa cache `v28` i przechowuje ten sam URL z wersją. Obsługa resetu pokazuje status przed walidacją i ma awaryjne uruchomienie klawiszem Enter.
 
+### Widoczność narzędzi i trwałe zdjęcia - 2026-07-23
+
+Kontrola narzędzi administratora korzysta wyłącznie z `currentAccount.isAdmin`; lokalny fallback uprawnień został usunięty. Upload zdjęć jest wykonywany przed finalnym zatwierdzeniem edycji, błędy zachowują obraz w IndexedDB, a endpoint `product-image.php` obsługuje chronione usuwanie pliku. Cache PWA zwiększono do `v29`.
+
+### Ukrywanie karty narzędzi administratora - 2026-07-23
+
+Karta `settings-admin-tab` jest całkowicie ukrywana dla kont bez `currentAccount.isAdmin === true`, otrzymuje `aria-hidden="true"` i nie jest dostępna z klawiatury. Zwykły użytkownik jest zawsze kierowany do ustawień użytkownika. Wersję cache PWA zwiększono do `v30`.
+
 ### Jednorazowy wyjątek danych konta testowa/test - 2026-07-23
 
 Snapshot `archives/prechange/20260723T180345Z-set-test-password` zawiera stan poprzedni. Na FTP zmieniono wyłącznie `app-private/storage/families/testowa/user-accounts.json`; plik pozostaje listą JSON bez BOM, a hash konta `test` jest bcrypt cost 12 i przechodzi `password_verify()`. Hasło wyjątku nie jest zapisywane w dokumentacji ani repozytorium.

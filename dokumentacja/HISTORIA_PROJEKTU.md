@@ -117,3 +117,11 @@ Utworzono snapshot `archives/prechange/20260723T180345Z-set-test-password`. Zmie
 ### Wymuszenie aktualnego JavaScriptu resetu - 2026-07-23
 
 Utworzono snapshot `archives/prechange/20260723T174013Z-reset-cache-v28`. Wersję `script.js` w HTML zmieniono na `v28`, service worker zwiększono do `v28`, a przycisk resetu otrzymał natychmiastowy komunikat rozpoczęcia oraz obsługę klawisza Enter. Dane kont, limity IP i hasło superadmina nie zostały zmienione.
+
+### Widoczność narzędzi i trwałe zdjęcia produktów - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T181354Z-admin-images`. Usunięto lokalny fallback uprawnień administratora: narzędzia są teraz zależne wyłącznie od roli potwierdzonej w bieżącej sesji. Zapis zdjęcia w edycji produktu jest wykonywany przed finalnym zapisem produktu; nieudany upload pozostawia obraz w IndexedDB do ponowienia po odzyskaniu połączenia. Dodano chronioną akcję usuwania zdjęcia, a cache PWA zwiększono do `v29`. GitHub pozostaje bez zmian.
+
+### Ukrycie karty narzędzi administratora - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T182514Z-hide-admin-tab`. Karta „Narzędzia administratora” jest teraz całkowicie ukrywana dla zwykłych kont, a nie tylko wyłączana. Zachowano kontrolę uprawnień opartą wyłącznie na sesji serwera; cache PWA zwiększono do `v30`. GitHub pozostaje bez zmian.

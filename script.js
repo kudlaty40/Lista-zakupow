@@ -1040,7 +1040,7 @@ function getAccountsUrl(user = getActiveUser()) {
 }
 
 function isAdminUser() {
-  return currentAccount?.isAdmin === true || localStorage.getItem("shoppingIsAdmin") === "true";
+  return currentAccount?.isAdmin === true;
 }
 
 function isAirtableConfigManager() {
@@ -1053,11 +1053,16 @@ function setSettingsSection(section = "user") {
   const adminSelected = activeSettingsSection === "admin";
   userSettingsPanel?.classList.toggle("hidden", adminSelected);
   adminTools?.classList.toggle("hidden", !canSeeAdmin || !adminSelected);
+  settingsAdminTab?.classList.toggle("hidden", !canSeeAdmin);
   settingsUserTab?.classList.toggle("active", !adminSelected);
   settingsAdminTab?.classList.toggle("active", adminSelected);
   settingsUserTab?.setAttribute("aria-selected", adminSelected ? "false" : "true");
   settingsAdminTab?.setAttribute("aria-selected", adminSelected ? "true" : "false");
-  if (settingsAdminTab) settingsAdminTab.disabled = !canSeeAdmin;
+  if (settingsAdminTab) {
+    settingsAdminTab.disabled = false;
+    settingsAdminTab.setAttribute("aria-hidden", canSeeAdmin ? "false" : "true");
+    settingsAdminTab.tabIndex = canSeeAdmin ? 0 : -1;
+  }
 }
 
 function setAdminVisibility() {
@@ -1823,7 +1828,6 @@ async function setAccountAdminFromRow(account, nextIsAdmin) {
         ...currentAccount,
         isAdmin: nextIsAdmin,
       };
-      localStorage.setItem("shoppingIsAdmin", nextIsAdmin ? "true" : "false");
       if (!nextIsAdmin) {
         localStorage.removeItem("shoppingAdminPassword");
       }
@@ -1953,7 +1957,6 @@ async function saveAccountEdit() {
         isAdmin,
       };
       localStorage.setItem("shoppingDisplayName", displayName);
-      localStorage.setItem("shoppingIsAdmin", isAdmin ? "true" : "false");
     }
 
     renderAccounts(payload.accounts || []);
@@ -3677,6 +3680,9 @@ function readImageFile(file, onLoad) {
 }
 
 function getProductImageUrl(item) {
+  if (item?.image) {
+    return item.image;
+  }
   if (item?.imageId) {
     return `${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}&id=${encodeURIComponent(item.imageId)}`;
   }
@@ -3691,26 +3697,45 @@ async function uploadProductImage(item, imageData) {
     }
     return false;
   }
-  const response = await fetch(imageData);
-  const blob = await response.blob();
-  const imageId = item.imageId || `image-${item.id}-${Date.now()}`;
+  try {
+    const response = await fetch(imageData);
+    const blob = await response.blob();
+    const imageId = item.imageId || `image-${item.id}-${Date.now()}`;
+    const body = new FormData();
+    body.append("id", imageId);
+    body.append("family", getActiveFamily());
+    body.append("image", blob, "product.webp");
+    const upload = await fetch(`${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}`, { method: "POST", body });
+    const payload = await upload.json();
+    if (!upload.ok || !payload.success) throw new Error(payload.error || "Nie udało się przesłać zdjęcia.");
+    item.imageId = payload.imageId;
+    item.image = null;
+    await offlineDbDelete(getOfflineImageKey(item.id)).catch(() => undefined);
+    await saveItems();
+    return true;
+  } catch (error) {
+    item.image = imageData;
+    await offlineDbWrite(getOfflineImageKey(item.id), imageData).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function deleteProductImage(item) {
+  if (!item?.imageId || !navigator.onLine) return false;
   const body = new FormData();
-  body.append("id", imageId);
+  body.append("action", "delete");
+  body.append("id", item.imageId);
   body.append("family", getActiveFamily());
-  body.append("image", blob, "product.webp");
-  const upload = await fetch(`${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}`, { method: "POST", body });
-  const payload = await upload.json();
-  if (!upload.ok || !payload.success) throw new Error(payload.error || "Nie udało się przesłać zdjęcia.");
-  item.imageId = payload.imageId;
-  item.image = null;
+  const response = await fetch(`${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}`, { method: "POST", body });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.success) throw new Error(payload.error || "Nie udało się usunąć zdjęcia.");
   await offlineDbDelete(getOfflineImageKey(item.id)).catch(() => undefined);
-  await saveItems();
   return true;
 }
 
 async function restorePendingImages() {
   await Promise.all(items.map(async (item) => {
-    if (!item?.id || item.image || item.imageId) return;
+    if (!item?.id || item.image) return;
     const cached = await offlineDbRead(getOfflineImageKey(item.id)).catch(() => null);
     if (typeof cached === "string" && cached.startsWith("data:image/")) item.image = cached;
   }));
@@ -3816,7 +3841,6 @@ function createImagePreviewOverlay() {
       readImageFile(file, (image) => {
         if (!currentPreviewItem) return;
         currentPreviewItem.image = image;
-        void saveItems();
         renderItems();
         showImagePreview(currentPreviewItem);
         void uploadProductImage(currentPreviewItem, image).then(() => {
@@ -3834,11 +3858,21 @@ function createImagePreviewOverlay() {
   deleteButton.addEventListener("click", (event) => {
     event.stopPropagation();
     if (currentPreviewItem) {
-      currentPreviewItem.image = null;
-      currentPreviewItem.imageId = null;
-      saveItems();
-      renderItems();
-      showImagePreview(currentPreviewItem);
+      if (currentPreviewItem.imageId && !navigator.onLine) {
+        setSyncStatus("Usuwanie zdjęcia wymaga połączenia z internetem.", true);
+        return;
+      }
+      const target = currentPreviewItem;
+      void deleteProductImage(target).then(() => {
+        target.image = null;
+        target.imageId = null;
+        return saveItems();
+      }).then(() => {
+        renderItems();
+        showImagePreview(target);
+      }).catch((error) => {
+        setSyncStatus(`Nie udało się usunąć zdjęcia: ${error.message}`, true);
+      });
     }
   });
 
@@ -3899,6 +3933,7 @@ function openProductEditor(item) {
   const card = document.createElement("div");
   card.className = "modal-card product-editor-card";
   let pendingImage = item.image || null;
+  let removePhotoRequested = false;
   const title = document.createElement("h2");
   title.textContent = "Edytuj produkt";
   const form = document.createElement("div");
@@ -3958,14 +3993,19 @@ function openProductEditor(item) {
   removePhotoButton.textContent = "Usuń zdjęcie";
   removePhotoButton.addEventListener("click", () => {
     pendingImage = null;
+    removePhotoRequested = true;
     photoButton.textContent = "Dodaj zdjęcie";
   });
+  const status = document.createElement("p");
+  status.className = "panel-note";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
   const actions = document.createElement("div");
   actions.className = "admin-actions";
   const saveButton = document.createElement("button");
   saveButton.type = "button";
   saveButton.textContent = "Zapisz";
-  saveButton.addEventListener("click", () => {
+  saveButton.addEventListener("click", async () => {
     const name = nameInput.value.trim();
     const quantity = Number(quantityInput.value);
     if (!name || !Number.isFinite(quantity) || quantity <= 0) {
@@ -3976,13 +4016,34 @@ function openProductEditor(item) {
     item.quantity = Math.max(0.01, Math.round(quantity * 100) / 100);
     item.unit = unitInput.value || "szt";
     item.category = categoryInput.value.trim().slice(0, 60);
-    item.image = pendingImage;
-    void saveItems();
-    renderItems();
-    if (pendingImage) {
-      void uploadProductImage(item, pendingImage).then(() => renderItems()).catch((error) => console.warn("Zdjęcie pozostanie lokalnie do kolejnej próby:", error));
+    saveButton.disabled = true;
+    removePhotoButton.disabled = true;
+    photoButton.disabled = true;
+      status.textContent = "Zapisywanie produktu i zdjęcia…";
+      try {
+      if (removePhotoRequested && item.imageId) {
+        if (!navigator.onLine) {
+          throw new Error("Usuwanie zdjęcia wymaga połączenia z internetem");
+        }
+        await deleteProductImage(item);
+        item.imageId = null;
+      }
+      item.image = pendingImage;
+      if (pendingImage && navigator.onLine) {
+        await uploadProductImage(item, pendingImage);
+      } else if (pendingImage) {
+        await offlineDbWrite(getOfflineImageKey(item.id), pendingImage);
+      }
+      await saveItems();
+      renderItems();
+      overlay.remove();
+    } catch (error) {
+      status.textContent = `Nie udało się zapisać zdjęcia: ${error.message}. Zdjęcie zachowano lokalnie i zostanie ponowione po odzyskaniu połączenia.`;
+      status.classList.add("error");
+      saveButton.disabled = false;
+      removePhotoButton.disabled = false;
+      photoButton.disabled = false;
     }
-    overlay.remove();
   });
   const cancelButton = document.createElement("button");
   cancelButton.type = "button";
@@ -3990,7 +4051,7 @@ function openProductEditor(item) {
   cancelButton.textContent = "Anuluj";
   cancelButton.addEventListener("click", () => overlay.remove());
   actions.append(photoButton, removePhotoButton, saveButton, cancelButton);
-  card.append(title, form, actions);
+  card.append(title, form, status, actions);
   overlay.appendChild(card);
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) overlay.remove();
@@ -4400,7 +4461,7 @@ window.addEventListener("online", () => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js?v=27").catch((error) => {
+    navigator.serviceWorker.register("sw.js?v=30").catch((error) => {
       console.warn("Nie udało się zarejestrować trybu offline:", error);
     });
   });

@@ -46,3 +46,5 @@ Na telefonie przycisk **Wyloguj** znajduje się w prawej części nagłówka.
 ## Reset hasła administratora rodziny
 
 Reset administratora rodziny wykonuje wyłącznie superadministrator w panelu **Admin**. W edycji rodziny należy wybrać administratora, wpisać nowe hasło dwa razy i kliknąć **Nadaj nowe hasło**. Przycisk **Zapisz zmiany** zapisuje dane rodziny, ale nie zmienia hasła.
+
+Narzędzia administratora rodziny są widoczne tylko dla kont z rolą administratora. Zdjęcia produktów są zapisywane w prywatnym magazynie; przy problemie z połączeniem pozostają lokalnie i są ponownie wysyłane po odzyskaniu internetu.

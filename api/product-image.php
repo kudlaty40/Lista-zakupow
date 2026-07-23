@@ -35,6 +35,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') imageJsonError(405, 'Niedozwolona metoda.');
 appRequireSameOriginForWrite();
+if (($_POST['action'] ?? '') === 'delete') {
+    appBackupBeforeMutation('product-image-delete');
+    $existing = glob($directory . '/' . $imageId . '.*') ?: [];
+    foreach ($existing as $old) {
+        if (is_file($old)) @unlink($old);
+    }
+    echo json_encode(['success' => true, 'imageId' => $imageId], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 if (!isset($_FILES['image']) || !is_uploaded_file($_FILES['image']['tmp_name'])) imageJsonError(400, 'Nie przesłano zdjęcia.');
 if ($_FILES['image']['error'] !== UPLOAD_ERR_OK || $_FILES['image']['size'] > 2 * 1024 * 1024) imageJsonError(400, 'Zdjęcie jest zbyt duże.');
 $imageInfo = @getimagesize($_FILES['image']['tmp_name']);
