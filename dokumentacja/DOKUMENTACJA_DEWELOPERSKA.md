@@ -53,6 +53,49 @@ Lokalnie potrzebny jest PHP z JSON i cURL oraz zapisywalne prywatne katalogi dan
 
 Przed publikacją sprawdź logowanie i wylogowanie, izolację rodzin, zmianę haseł, zapis i odczyt produktów, zdjęcia, kategorie, potwierdzenie usuwania, ustawienia, tryb offline, synchronizację Airtable, nagłówki oraz blokadę plików prywatnych. Wykonaj `php -l` dla zmienionych endpointów i skan sekretów przed commitem.
 
+## Ujednolicenie haseł i reset administratora — wdrożenie 2026-07-23
+
+Przed zmianą wykonano snapshot `archives/prechange/20260723T151943Z-hasla-reset`, obejmujący kod oraz aktywne pliki kont wszystkich rodzin i indeks rodzin.
+
+Wszystkie nowe i zmieniane hasła korzystają ze wspólnej walidacji: minimum 8 znaków, cyfra i znak specjalny. Zapis jest ujednolicony do bcrypt cost 12. Endpoint resetu administratora zapisuje hash atomowo, odczytuje plik ponownie i potwierdza `password_verify()` przed zwróceniem sukcesu. Cache PWA zwiększono do `v19`.
+
+## Logowanie rodzin i reset haseł — wdrożenie 2026-07-23
+
+Przed wdrożeniem utworzono snapshot FTP w `archives/prechange/20260723T150802Z-rodziny-superadmin`. Wysłano wyłącznie przejrzane pliki aplikacji; nie kopiowano lokalnego archiwum, dokumentacji ani danych użytkowników.
+
+Logowanie obsługuje migrację starszych jawnych haseł: po pierwszym poprawnym logowaniu hasło jest natychmiast zastępowane hashem. Konfiguracja magazynu pozostaje oparta na prywatnym `app-private/config.php`, zgodnie z konfiguracją hostingu.
+
+Panel superadmina pobiera administratorów wybranej rodziny i wysyła do resetu `familySlug`, `username` oraz nowe hasło. Airtable i synchronizacja nie zawierają stałej rodziny ani użytkownika Polak/Bartek. Cache PWA zwiększono do `v18`.
+
 ## Archiwum bazowe
 
 Jednorazowy stan zakończonego projektu jest przechowywany lokalnie w katalogu `archives/FINAL-IMMUTABLE-20260722T203340Z`. Zawiera pełny stan pobrany z FTP, manifest SHA-256 oraz szyfrowany plik `FTP-STATE.tar.gz.aes`. Odtworzenie jest ręczne i wymaga skryptu `archives/Restore-FinalImmutable.ps1`, hasła archiwum, parametru `-ConfirmRestore` oraz dodatkowego wpisania `RESTORE`. Skrypt usuwa i odtwarza wyłącznie zarządzane katalogi aplikacji: `public_html`, `app-private` i `.grilujmy-backups`.
+## Diagnostyka resetu administratora - 2026-07-23
+
+Reset rodziny wymaga aktywnej sesji superadmina. Frontend wysyla zadania z `credentials: same-origin` i `cache: no-store`, blokuje przycisk do czasu pobrania administratorow oraz rozroznia bledy HTTP. Backend sprawdza rodzine, login i role administratora, zapisuje atomowo, ponownie odczytuje plik i weryfikuje `password_verify()` dla bcrypt cost 12.
+
+Snapshot: `archives/prechange/20260723T152751Z-diagnostyka-testowa`. Weryfikacja FTP: zgodne sumy SHA-256, PWA `v20`, proba resetu bez sesji `403`. Rzeczywisty reset wykonac dopiero po zalogowaniu superadmina.
+### Runtime rate-limit reset - 2026-07-23
+
+Jednorazowo usunięto plik blokady `account-login` odpowiadający kluczowi `testowa:test` w prywatnym `app-private/storage/rate-limits`. Limit IP nie był zablokowany i nie został usunięty. Kod `security.php`, progi 5/10 prób i czas 15 minut pozostają bez zmian. Kontrolna błędna próba logowania zwróciła `401`, a nie `429`.
+### Reset danych konta testowa/test - 2026-07-23
+
+Jednorazowy reset wykonano wyłącznie w `app-private/storage/families/testowa/user-accounts.json`. Hasło `test` zapisano jako bcrypt cost 12. Plik musi być tablicą JSON zapisany bez BOM; zapis pojedynczego obiektu powoduje, że PHP nie znajdzie konta podczas iteracji.
+
+Weryfikacja HTTPS: logowanie i sesja `testowa` działają, próba odczytu `polak` z tej sesji zwraca odmowę dostępu, a limit logowania nadal zwraca `429` po przekroczeniu progu. Walidacja nowych haseł i kod endpointu resetu pozostały niezmienione.
+### Reset hasła administratora rodziny - diagnostyka i UI
+
+Formularz superadmina ma dwa pola hasła z lokalnym przełącznikiem Pokaż/Ukryj oraz osobny komunikat statusu. Przycisk resetu jest blokowany na czas żądania. Sukces jest wyświetlany dopiero po odpowiedzi API potwierdzającej zapis i ponowną weryfikację hasha.
+
+`families.php` normalizuje `username`, wymaga listy kont JSON i zapisuje `array_values()` przez atomowy zapis bez BOM. Po zapisie sprawdza listę, właściwy login, bcrypt cost 12 i `password_verify()`. Nie zwraca hasła ani hasha.
+### Diagnostyka resetu administratora rodziny
+
+`set_family_admin_password` po zapisie i weryfikacji bcrypt cost 12 wykonuje `appClearRateLimit('account-login', familySlug:username)` i zwraca `passwordVerified` oraz `accountRateLimitCleared`. Limit IP pozostaje aktywny. Frontend pokazuje wynik w modalu i globalnym statusie panelu, rozróżnia `401/403`, `429` i błędy zapisu oraz wymusza `credentials: same-origin` i `cache: no-store`.
+### Ustawienia kart i motyw konta
+
+Panel ustawień zawiera `settings-user-tab` oraz `settings-admin-tab`. Widoczność narzędzi administratora nadal zależy od `isAdmin`. Motyw jest zapisywany jako `settings.theme` (`light`/`dark`) w istniejącym payloadzie ustawień konta i nakładany przez `html[data-theme]`. Brak pola oznacza motyw jasny.
+
+CSS dla `data-theme="dark"` nadpisuje kolory powierzchni, tekstów, obramowań, formularzy, przycisków, kategorii i modali z zachowaniem kontrastu. Service worker został zwiększony do `v23`.
+### Zakładki i kontrolki dark mode
+
+Reguły `html[data-theme="dark"]` obejmują `.tab-button`, `.admin-tab-button`, `.settings-section-tab`, `.category-toggle`, `.all-product-expand-button` oraz przyciski akcji produktów. Nieaktywne zakładki używają kontrastowego granatowego tła, aktywne pozostają fioletowe, a focus jest wyróżniony obramowaniem. Service worker ma wersję `v24`.

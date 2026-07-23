@@ -26,16 +26,27 @@ register_shutdown_function(function () {
     appSendJsonFailure(500, 'Wystąpił błąd serwera. Spróbuj ponownie.');
 });
 
+function appPrivateConfig() {
+    static $config = null;
+    if (is_array($config)) return $config;
+    $path = dirname(__DIR__, 2) . '/app-private/config.php';
+    if (!is_file($path)) appJsonError(500, 'Brakuje prywatnej konfiguracji aplikacji.');
+    $loaded = require $path;
+    if (!is_array($loaded)) appJsonError(500, 'Nieprawidłowa prywatna konfiguracja aplikacji.');
+    return $config = $loaded;
+}
+
+function appAirtableConfig() {
+    $config = appPrivateConfig();
+    return is_array($config['airtable'] ?? null) ? $config['airtable'] : [];
+}
+
 function appStorageDir() {
-    $configured = trim((string) (getenv('APP_STORAGE_DIR') ?: ''));
-    if ($configured === '') {
-        appJsonError(500, 'Brakuje bezpiecznej konfiguracji magazynu danych.');
-    }
-    $storageDir = $configured;
-    if (!is_dir($storageDir) || !is_writable($storageDir)) {
+    $configured = trim((string) (appPrivateConfig()['storage_dir'] ?? ''));
+    if ($configured === '' || !is_dir($configured) || !is_writable($configured)) {
         appJsonError(500, 'Katalog danych aplikacji jest niedostępny.');
     }
-    return rtrim($storageDir, '/\\');
+    return rtrim($configured, '/\\');
 }
 
 function appIsHttps() {
@@ -185,22 +196,32 @@ function appClearRateLimit($scope, $identifier) {
 }
 
 function appPasswordAlgorithm() {
-    $algorithms = function_exists('password_algos') ? password_algos() : [];
-    return in_array('argon2id', $algorithms, true) ? PASSWORD_ARGON2ID : PASSWORD_BCRYPT;
+    // Keep every active account on the same portable bcrypt cost level.
+    return PASSWORD_BCRYPT;
 }
 
 function appPasswordHash($password) {
-    $algorithm = appPasswordAlgorithm();
-    return $algorithm === PASSWORD_BCRYPT
-        ? password_hash($password, $algorithm, ['cost' => 12])
-        : password_hash($password, $algorithm);
+    return password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+}
+
+function appValidatePassword($password) {
+    $value = (string) $password;
+    return strlen($value) >= 8
+        && preg_match('/\d/', $value)
+        && preg_match('/[^A-Za-z0-9]/', $value);
 }
 
 function appVerifyPassword($password, $stored) {
     if ($password === '' || !is_string($stored) || $stored === '') {
         return false;
     }
-    return str_starts_with($stored, '$') && password_verify($password, $stored);
+    if (str_starts_with($stored, '$')) {
+        return password_verify($password, $stored);
+    }
+
+    // Legacy deployments may contain a plaintext password. Accept it only
+    // for the one successful login needed to migrate it immediately below.
+    return hash_equals($stored, (string) $password);
 }
 
 function appPasswordNeedsMigration($stored) {

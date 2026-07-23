@@ -899,6 +899,184 @@ input[type="file"] {
   padding: 10px 14px;
 }
 
+html[data-theme="dark"] {
+  --bg: #0f172a;
+  --card: #182235;
+  --text: #f8fafc;
+  --muted: #b8c2d1;
+  --border: #475569;
+  --surface-muted: #24314a;
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] body {
+  background: radial-gradient(circle at top, #1e293b 0%, #111827 58%, #0f172a 100%);
+}
+
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .settings-card,
+html[data-theme="dark"] .super-admin-card,
+html[data-theme="dark"] .modal-card,
+html[data-theme="dark"] .item-row {
+  background: var(--card);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="password"],
+html[data-theme="dark"] input[type="number"],
+html[data-theme="dark"] input[type="file"],
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background: #111827;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .secondary,
+html[data-theme="dark"] .tab-button,
+html[data-theme="dark"] .settings-section-tab,
+html[data-theme="dark"] .admin-tab-button,
+html[data-theme="dark"] .item-edit-button,
+html[data-theme="dark"] .category-toggle,
+html[data-theme="dark"] .password-toggle {
+  background: #263650;
+  color: #f8fafc;
+  border-color: #64748b;
+}
+
+html[data-theme="dark"] .tab-button:hover,
+html[data-theme="dark"] .tab-button:focus-visible,
+html[data-theme="dark"] .settings-section-tab:hover,
+html[data-theme="dark"] .settings-section-tab:focus-visible,
+html[data-theme="dark"] .admin-tab-button:hover,
+html[data-theme="dark"] .admin-tab-button:focus-visible,
+html[data-theme="dark"] .secondary:hover,
+html[data-theme="dark"] .secondary:focus-visible,
+html[data-theme="dark"] .category-toggle:hover,
+html[data-theme="dark"] .category-toggle:focus-visible {
+  background: #354968;
+  border-color: #a5b4fc;
+  color: #fff;
+}
+
+html[data-theme="dark"] .tab-button.active,
+html[data-theme="dark"] .tab-button.active:hover,
+html[data-theme="dark"] .tab-button.active:focus-visible {
+  background: var(--primary);
+  color: #fff;
+  border-color: #a5b4fc;
+}
+
+html[data-theme="dark"] .settings-section-tab.active,
+html[data-theme="dark"] .admin-tab-button.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+html[data-theme="dark"] .item-view-button,
+html[data-theme="dark"] .item-nutrition-button,
+html[data-theme="dark"] .item-edit-button,
+html[data-theme="dark"] .item-delete-button {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+html[data-theme="dark"] .item-view-button,
+html[data-theme="dark"] .item-nutrition-button,
+html[data-theme="dark"] .item-edit-button {
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] .all-product-expand-button,
+html[data-theme="dark"] .item-order,
+html[data-theme="dark"] .item-owner-badge {
+  background: #293b68;
+  color: #eef2ff;
+  border-color: #64748b;
+}
+
+html[data-theme="dark"] .all-product-expand-button:hover,
+html[data-theme="dark"] .all-product-expand-button:focus-visible {
+  background: #40558c;
+  color: #fff;
+}
+
+html[data-theme="dark"] .item-row.selected,
+html[data-theme="dark"] .transfer-editor {
+  background: #26365c;
+  border-color: #818cf8;
+}
+
+html[data-theme="dark"] .panel-note,
+html[data-theme="dark"] p,
+html[data-theme="dark"] .login-helper,
+html[data-theme="dark"] .item-category,
+html[data-theme="dark"] .item-unit {
+  color: var(--muted);
+}
+
+html[data-theme="dark"] .item-row:hover,
+html[data-theme="dark"] .settings-card:hover {
+  border-color: #818cf8;
+}
+
+.settings-section-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.settings-section-tab {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #eef2ff;
+  color: var(--text);
+  font: inherit;
+}
+
+.settings-section-tab.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.settings-section-tab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.password-field {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.password-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.password-toggle {
+  flex: 0 0 auto;
+  min-width: 72px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted, #f4f5ff);
+  color: var(--text);
+  font: inherit;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  border-color: var(--accent);
+}
+
 .error {
   color: var(--danger);
   min-height: 1.2em;

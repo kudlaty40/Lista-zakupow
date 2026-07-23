@@ -367,7 +367,11 @@ function applySharedOperations($payload, $operations) {
     return $payload;
 }
 
-$airtableEnabled = isAirtableConfigured($airtableApiKey, $airtableBaseId, $airtableTableName);
+// Airtable is a global integration managed by the superadmin. Family users
+// always use the local family-scoped store; the superadmin sync endpoint is
+// responsible for sending all families to Airtable.
+$airtableEnabled = !empty($_SESSION['super_admin'])
+    && isAirtableConfigured($airtableApiKey, $airtableBaseId, $airtableTableName);
 $shouldSync = isset($_GET['sync']) && (string) $_GET['sync'] === '1';
 $airtableUserKey = $familySlug . ':' . $userKey;
 

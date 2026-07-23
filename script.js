@@ -28,9 +28,13 @@ const familyEditSaveButton = document.getElementById("family-edit-save");
 const familyEditNameInput = document.getElementById("family-edit-name");
 const familyEditAdminUsernameInput = document.getElementById("family-edit-admin-username");
 const familyEditAdminDisplayInput = document.getElementById("family-edit-admin-display");
+const familyEditAdminTargetSelect = document.getElementById("family-edit-admin-target");
 const familyEditAdminPasswordInput = document.getElementById("family-edit-admin-password");
 const familyEditAdminPasswordConfirmInput = document.getElementById("family-edit-admin-password-confirm");
+const familyEditAdminPasswordToggle = document.getElementById("family-edit-admin-password-toggle");
+const familyEditAdminPasswordConfirmToggle = document.getElementById("family-edit-admin-password-confirm-toggle");
 const familyEditPasswordSaveButton = document.getElementById("family-edit-password-save");
+const familyEditPasswordStatus = document.getElementById("family-edit-password-status");
 const accountEditModal = document.getElementById("account-edit-modal");
 const accountEditCloseButton = document.getElementById("account-edit-close");
 const accountEditCancelButton = document.getElementById("account-edit-cancel");
@@ -67,6 +71,9 @@ const shopTab = document.getElementById("shop-tab");
 const allTab = document.getElementById("all-tab");
 const diaryTab = document.getElementById("diary-tab");
 const settingsTab = document.getElementById("settings-tab");
+const userSettingsPanel = document.getElementById("user-settings-panel");
+const settingsUserTab = document.getElementById("settings-user-tab");
+const settingsAdminTab = document.getElementById("settings-admin-tab");
 const addItemSection = document.getElementById("add-item-section");
 const adminTools = document.getElementById("admin-tools");
 const adminTabButtons = document.querySelectorAll(".admin-tab-button");
@@ -88,6 +95,7 @@ const diaryTabVisibleCheckbox = document.getElementById("diary-tab-visible");
 const shoppingOwnerVisibleCheckbox = document.getElementById("shopping-owner-visible");
 const shoppingCategoryGroupingCheckbox = document.getElementById("shopping-category-grouping");
 const allProductsCategoryGroupingCheckbox = document.getElementById("all-products-category-grouping");
+const darkThemeToggle = document.getElementById("dark-theme-toggle");
 const shoppingMoveOnSelectionCheckbox = document.getElementById("shopping-move-on-selection");
 const saveUserSettingsButton = document.getElementById("save-user-settings-button");
 const userSettingsStatus = document.getElementById("user-settings-status");
@@ -149,6 +157,7 @@ let pendingNewItemImage = null;
 let currentUser = "";
 let currentAccount = null;
 let activeAdminTab = "airtable";
+let activeSettingsSection = "user";
 let diaryEntries = [];
 let shoppingSortMode = "created";
 const SERVER_STORAGE_URL = "api/products.php";
@@ -168,6 +177,7 @@ const DEFAULT_USER_SETTINGS = {
   showMacroProducts: false,
   showMacroDiary: true,
   hideDiary: false,
+  theme: "light",
   showShoppingOwnerInfo: true,
   syncMode: "manual",
   syncWeeks: 0,
@@ -188,6 +198,8 @@ const expandedProductActions = new Set();
 let superAdminAuthorized = false;
 let editingFamilySlug = "";
 let editingAccountUsername = "";
+let canManageFamilyAdmins = false;
+let primaryFamilyAdminUsername = "";
 let serverLastSelectedFamily = "";
 let offlineWriteChain = Promise.resolve();
 let sharedServerRevision = "";
@@ -717,6 +729,7 @@ function normalizeSettings(rawSettings) {
     : rawSettings?.showMacroShop === true && rawSettings?.showMacroAll === true;
   next.showMacroDiary = next.showMacroDiary !== false;
   next.hideDiary = next.hideDiary === true;
+  next.theme = next.theme === "dark" ? "dark" : "light";
   next.showShoppingOwnerInfo = next.showShoppingOwnerInfo !== false;
   next.syncMode = next.syncMode === "auto" ? "auto" : "manual";
   next.syncWeeks = Math.max(0, Number(next.syncWeeks) || 0);
@@ -724,6 +737,12 @@ function normalizeSettings(rawSettings) {
   next.syncHours = Math.max(0, Number(next.syncHours) || 0);
   next.syncMinutes = Math.max(0, Number(next.syncMinutes) || 0);
   return next;
+}
+
+function applyAccountTheme() {
+  const dark = userSettings.theme === "dark";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  document.documentElement.style.colorScheme = dark ? "dark" : "light";
 }
 
 function normalizeUserViewSettings(rawSettings) {
@@ -805,6 +824,7 @@ function applySharedPayload(payload) {
   if (Array.isArray(payload)) {
     items = normalizeItems(payload);
     userSettings = { ...DEFAULT_USER_SETTINGS };
+    applyAccountTheme();
     return;
   }
 
@@ -825,11 +845,13 @@ function applySharedPayload(payload) {
 
     items = normalizeItems(nextItems);
     userSettings = normalizeSettings(nextSettings);
+    applyAccountTheme();
     return;
   }
 
   items = [];
   userSettings = { ...DEFAULT_USER_SETTINGS };
+  applyAccountTheme();
 }
 
 function applyDiaryPayload(payload) {
@@ -973,7 +995,7 @@ function setDataDirty() {
 
 async function checkAirtableConnection() {
   if (!isAirtableConfigManager()) {
-    setConnectionStatus("dostępne wyłącznie dla Bartka w rodzinie Polak");
+    setConnectionStatus("zarządzane przez administratora globalnego");
     return;
   }
 
@@ -1025,6 +1047,19 @@ function isAirtableConfigManager() {
   return false;
 }
 
+function setSettingsSection(section = "user") {
+  const canSeeAdmin = isAdminUser();
+  activeSettingsSection = section === "admin" && canSeeAdmin ? "admin" : "user";
+  const adminSelected = activeSettingsSection === "admin";
+  userSettingsPanel?.classList.toggle("hidden", adminSelected);
+  adminTools?.classList.toggle("hidden", !canSeeAdmin || !adminSelected);
+  settingsUserTab?.classList.toggle("active", !adminSelected);
+  settingsAdminTab?.classList.toggle("active", adminSelected);
+  settingsUserTab?.setAttribute("aria-selected", adminSelected ? "false" : "true");
+  settingsAdminTab?.setAttribute("aria-selected", adminSelected ? "true" : "false");
+  if (settingsAdminTab) settingsAdminTab.disabled = !canSeeAdmin;
+}
+
 function setAdminVisibility() {
   if (!adminTools) {
     return;
@@ -1032,6 +1067,7 @@ function setAdminVisibility() {
 
   const canSeeAdmin = isAdminUser();
   adminTools.classList.toggle("hidden", !canSeeAdmin);
+  setSettingsSection(activeSettingsSection);
 
   const canManageAirtable = false;
   const airtableTab = document.getElementById("admin-tab-airtable");
@@ -1095,6 +1131,21 @@ function setSuperAdminStatus(message, isError = false) {
   superAdminStatus.classList.toggle("error", isError);
 }
 
+function setFamilyEditPasswordStatus(message, isError = false) {
+  if (!familyEditPasswordStatus) return;
+  familyEditPasswordStatus.textContent = message;
+  familyEditPasswordStatus.classList.toggle("error", isError);
+}
+
+function togglePasswordField(input, button) {
+  if (!input || !button) return;
+  const visible = input.type === "text";
+  input.type = visible ? "password" : "text";
+  button.textContent = visible ? "Pokaż" : "Ukryj";
+  button.setAttribute("aria-label", visible ? "Pokaż hasło" : "Ukryj hasło");
+  button.setAttribute("aria-pressed", visible ? "false" : "true");
+}
+
 function setActiveSuperAdminTab(tab) {
   const active = ["families", "airtable", "sync", "security"].includes(tab) ? tab : "families";
   superAdminTabButtons.forEach((button) => {
@@ -1116,10 +1167,51 @@ function updateSuperAdminOverview() {
 
 function closeFamilyEditModal() {
   editingFamilySlug = "";
+  if (familyEditAdminTargetSelect) {
+    familyEditAdminTargetSelect.innerHTML = "<option value=\"\">Wybierz administratora</option>";
+  }
+  if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = true;
+  if (familyEditAdminPasswordInput) familyEditAdminPasswordInput.type = "password";
+  if (familyEditAdminPasswordConfirmInput) familyEditAdminPasswordConfirmInput.type = "password";
+  if (familyEditAdminPasswordToggle) { familyEditAdminPasswordToggle.textContent = "Pokaż"; familyEditAdminPasswordToggle.setAttribute("aria-pressed", "false"); }
+  if (familyEditAdminPasswordConfirmToggle) { familyEditAdminPasswordConfirmToggle.textContent = "Pokaż"; familyEditAdminPasswordConfirmToggle.setAttribute("aria-pressed", "false"); }
+  setFamilyEditPasswordStatus("");
   familyEditModal?.classList.add("hidden");
 }
 
-function openFamilyEditModal(family) {
+async function loadFamilyAdminTargets(familySlug, preferredUsername = "") {
+  if (!familyEditAdminTargetSelect) return;
+  familyEditAdminTargetSelect.innerHTML = "<option value=\"\">Wczytywanie administratorów…</option>";
+  try {
+    const response = await fetch(FAMILIES_STORAGE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+      body: JSON.stringify({ action: "get_family_admins", familySlug }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    const admins = Array.isArray(payload.admins) ? payload.admins : [];
+    familyEditAdminTargetSelect.innerHTML = "";
+    admins.forEach((admin) => {
+      const option = document.createElement("option");
+      option.value = admin.username || "";
+      option.textContent = admin.displayName ? `${admin.username} (${admin.displayName})` : admin.username;
+      familyEditAdminTargetSelect.appendChild(option);
+    });
+    if (preferredUsername && admins.some((admin) => admin.username === preferredUsername)) {
+      familyEditAdminTargetSelect.value = preferredUsername;
+    }
+    if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = admins.length === 0;
+  } catch (error) {
+    familyEditAdminTargetSelect.innerHTML = "<option value=\"\">Nie udało się wczytać administratorów</option>";
+    if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = true;
+    setSuperAdminStatus(`Błąd wczytywania administratorów: ${error.message}`, true);
+  }
+}
+
+async function openFamilyEditModal(family) {
   editingFamilySlug = normalizeFamilySlug(family?.slug || "");
   if (!editingFamilySlug) {
     setSuperAdminStatus("Nie udało się otworzyć edycji rodziny.", true);
@@ -1137,8 +1229,10 @@ function openFamilyEditModal(family) {
   }
   if (familyEditAdminPasswordInput) familyEditAdminPasswordInput.value = "";
   if (familyEditAdminPasswordConfirmInput) familyEditAdminPasswordConfirmInput.value = "";
+  setFamilyEditPasswordStatus("");
 
   familyEditModal?.classList.remove("hidden");
+  await loadFamilyAdminTargets(editingFamilySlug, family?.adminUsername || "");
 }
 
 function renderSuperAdminFamilyList() {
@@ -1232,6 +1326,8 @@ async function loadFamilies() {
     const response = await fetch(FAMILIES_STORAGE_URL, {
       method: "GET",
       headers: { Accept: "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
     });
     const payload = await response.json();
     if (!response.ok || !payload.success) {
@@ -1292,6 +1388,8 @@ async function continueWithFamilySelection() {
     await fetch(FAMILIES_STORAGE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
       body: JSON.stringify({ action: "set_last_selected_family", familySlug: family }),
     });
     serverLastSelectedFamily = family;
@@ -1315,6 +1413,8 @@ async function loginSuperAdmin() {
     const response = await fetch(FAMILIES_STORAGE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
       body: JSON.stringify({ action: "super_admin_login", password }),
     });
     const payload = await response.json();
@@ -1356,6 +1456,8 @@ async function createFamily() {
     const response = await fetch(FAMILIES_STORAGE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
       body: JSON.stringify({
         action: "create_family",
         familyName,
@@ -1401,6 +1503,8 @@ async function saveFamilyEdit() {
     const response = await fetch(FAMILIES_STORAGE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
       body: JSON.stringify({
         action: "update_family",
         familySlug,
@@ -1442,12 +1546,18 @@ async function changeSuperAdminPassword() {
     setSuperAdminStatus("Podaj obecne i nowe hasło administratora globalnego.", true);
     return;
   }
+  if (!validateNewPassword(newPassword)) {
+    setSuperAdminStatus("Hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true);
+    return;
+  }
 
   setSuperAdminStatus("Zmiana hasła...");
   try {
     const response = await fetch(FAMILIES_STORAGE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
       body: JSON.stringify({ action: "change_super_admin_password", oldPassword, newPassword }),
     });
     const payload = await response.json();
@@ -1608,15 +1718,18 @@ function renderAccounts(accounts) {
     });
     actions.appendChild(passwordButton);
 
-    const adminButton = document.createElement("button");
-    adminButton.type = "button";
-    adminButton.className = "item-view-button";
-    adminButton.title = account.isAdmin ? "Odbierz uprawnienia administratora" : "Nadaj uprawnienia administratora";
-    adminButton.textContent = account.isAdmin ? "★" : "☆";
-    adminButton.addEventListener("click", () => {
-      void setAccountAdminFromRow(account, account.isAdmin !== true);
-    });
-    actions.appendChild(adminButton);
+    const isPrimaryAdmin = account.username === primaryFamilyAdminUsername;
+    if (canManageFamilyAdmins && !isPrimaryAdmin) {
+      const adminButton = document.createElement("button");
+      adminButton.type = "button";
+      adminButton.className = "item-view-button";
+      adminButton.title = account.isAdmin ? "Odbierz uprawnienia administratora" : "Nadaj uprawnienia administratora";
+      adminButton.textContent = account.isAdmin ? "★" : "☆";
+      adminButton.addEventListener("click", () => {
+        void setAccountAdminFromRow(account, account.isAdmin !== true);
+      });
+      actions.appendChild(adminButton);
+    }
 
     const editButton = document.createElement("button");
     editButton.type = "button";
@@ -1648,6 +1761,10 @@ async function setAccountAdminFromRow(account, nextIsAdmin) {
   const username = normalizeAccountUsername(account?.username || "");
   const activeUsername = normalizeAccountUsername(currentAccount?.username || currentUser || "");
 
+  if (!canManageFamilyAdmins) {
+    setAccountsStatus("Tylko pierwszy administrator rodziny może nadawać uprawnienia.", true);
+    return;
+  }
   if (!username) {
     setAccountsStatus("Brak poprawnego loginu konta.", true);
     return;
@@ -1749,7 +1866,10 @@ async function editAccountFromRow(account) {
   if (accountEditUsernameInput) accountEditUsernameInput.value = username;
   if (accountEditDisplayNameInput) accountEditDisplayNameInput.value = account?.displayName || "";
   if (accountEditNoteInput) accountEditNoteInput.value = account?.note || "";
-  if (accountEditIsAdminCheckbox) accountEditIsAdminCheckbox.checked = account?.isAdmin === true;
+  if (accountEditIsAdminCheckbox) {
+    accountEditIsAdminCheckbox.checked = account?.isAdmin === true;
+    accountEditIsAdminCheckbox.disabled = !canManageFamilyAdmins || username === primaryFamilyAdminUsername;
+  }
   if (accountEditPasswordInput) accountEditPasswordInput.value = "";
   if (accountEditPasswordConfirmInput) accountEditPasswordConfirmInput.value = "";
   accountEditModal?.classList.remove("hidden");
@@ -1871,6 +1991,8 @@ async function loadAccounts() {
     if (!response.ok || !payload.success) {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
+    canManageFamilyAdmins = payload.canManageAdmins === true;
+    primaryFamilyAdminUsername = String(payload.primaryAdminUsername || "");
     renderAccounts(payload.accounts || []);
     setAccountsStatus("Konta zostały wczytane.");
   } catch (error) {
@@ -2017,6 +2139,8 @@ async function logoutSuperAdmin() {
     await fetch(FAMILIES_STORAGE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
       body: JSON.stringify({ action: "super_admin_logout" }),
     });
   } catch {
@@ -2028,20 +2152,56 @@ async function logoutSuperAdmin() {
 }
 
 async function setFamilyAdminPassword() {
-  if (!superAdminAuthorized || !editingFamilySlug) return;
+  if (!superAdminAuthorized || !editingFamilySlug) {
+    setFamilyEditPasswordStatus("Sesja superadmina wygasła. Zaloguj się ponownie.", true);
+    setSuperAdminStatus("Sesja superadmina wygasła. Zaloguj się ponownie.", true);
+    return;
+  }
+  const username = familyEditAdminTargetSelect?.value || "";
   const password = (familyEditAdminPasswordInput?.value || "").trim();
   const confirmation = (familyEditAdminPasswordConfirmInput?.value || "").trim();
-  if (!validateNewPassword(password)) { setSuperAdminStatus("Hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true); return; }
-  if (password !== confirmation) { setSuperAdminStatus("Hasła nie są identyczne.", true); return; }
-  setSuperAdminStatus("Zapisywanie nowego hasła administratora rodziny…");
+  if (!username) { setFamilyEditPasswordStatus("Wybierz administratora rodziny.", true); return; }
+  if (!validateNewPassword(password)) { setFamilyEditPasswordStatus("Hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true); return; }
+  if (password !== confirmation) { setFamilyEditPasswordStatus("Hasła nie są identyczne.", true); return; }
+  if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = true;
+  setFamilyEditPasswordStatus("Zapisywanie i weryfikowanie nowego hasła…");
   try {
-    const response = await fetch(FAMILIES_STORAGE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "set_family_admin_password", familySlug: editingFamilySlug, password }) });
+    const sessionCheck = await fetch(FAMILIES_STORAGE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify({ action: "get_family_admins", familySlug: editingFamilySlug }) });
+    const sessionPayload = await sessionCheck.json();
+    if (!sessionCheck.ok || !sessionPayload.success) {
+      const error = new Error(sessionPayload.error || `HTTP ${sessionCheck.status}`);
+      error.status = sessionCheck.status;
+      throw error;
+    }
+    if (!Array.isArray(sessionPayload.admins) || !sessionPayload.admins.some((admin) => admin.username === username)) throw new Error("Wybrany administrator nie jest już dostępny w tej rodzinie.");
+    const response = await fetch(FAMILIES_STORAGE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify({ action: "set_family_admin_password", familySlug: editingFamilySlug, username, password }) });
     const payload = await response.json();
-    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    if (!response.ok || !payload.success) {
+      const error = new Error(payload.error || `HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    if (payload.passwordVerified !== true || payload.accountRateLimitCleared !== true) {
+      throw new Error("Serwer nie potwierdził pełnego resetu hasła i blokady logowania.");
+    }
     if (familyEditAdminPasswordInput) familyEditAdminPasswordInput.value = "";
     if (familyEditAdminPasswordConfirmInput) familyEditAdminPasswordConfirmInput.value = "";
-    setSuperAdminStatus("Hasło administratora rodziny zostało zmienione.");
-  } catch (error) { setSuperAdminStatus(`Błąd zmiany hasła: ${error.message}`, true); }
+    const target = `${editingFamilySlug}/${payload.username || username}`;
+    const successMessage = `Hasło administratora ${target} zostało zmienione i zweryfikowane. Można się teraz zalogować nowym hasłem.`;
+    setFamilyEditPasswordStatus(successMessage);
+    setSuperAdminStatus(successMessage);
+  } catch (error) {
+    const status = Number(error?.status || 0);
+    const message = status === 429
+      ? "Blokada logowania po adresie IP jest nadal aktywna. Odczekaj i spróbuj ponownie."
+      : (status === 401 || status === 403)
+        ? "Sesja superadmina wygasła lub nie ma uprawnień. Zaloguj się ponownie."
+        : (error?.message || "Nie udało się zmienić hasła.");
+    setFamilyEditPasswordStatus(`Hasło nie zostało zmienione: ${message}`, true);
+    setSuperAdminStatus(`Błąd zmiany hasła: ${message}`, true);
+  } finally {
+    if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = false;
+  }
 }
 
 function setSuperAdminAirtableMessage(message, isError = false) {
@@ -2075,7 +2235,7 @@ async function loadSuperAdminAirtableConfig() {
   if (!superAdminAuthorized) return;
   setSuperAdminAirtableMessage("Wczytywanie konfiguracji…");
   try {
-    const response = await fetch("api/airtable-settings.php", { headers: { Accept: "application/json" } });
+     const response = await fetch("api/airtable-settings.php", { headers: { Accept: "application/json" }, credentials: "same-origin", cache: "no-store" });
     const payload = await response.json();
     if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
     const config = payload.config || {};
@@ -2092,7 +2252,7 @@ async function saveSuperAdminAirtableConfig() {
   if (!superAdminAuthorized) return;
   setSuperAdminAirtableMessage("Zapisywanie konfiguracji…");
   try {
-    const response = await fetch("api/airtable-settings.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+     const response = await fetch("api/airtable-settings.php", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify({
       api_key: superAdminAirtableApiKeyInput?.value.trim() || "", base_id: superAdminAirtableBaseIdInput?.value.trim() || "",
       table_name: superAdminAirtableTableNameInput?.value.trim() || "shopping_list", user_field: superAdminAirtableUserFieldInput?.value.trim() || "user",
       data_field: superAdminAirtableDataFieldInput?.value.trim() || "data", updated_field: superAdminAirtableUpdatedFieldInput?.value.trim() || "updated_at",
@@ -2109,7 +2269,7 @@ async function testSuperAdminAirtable() {
   if (!superAdminAuthorized) return;
   setSuperAdminAirtableMessage("Testowanie połączenia…");
   try {
-    const response = await fetch("api/airtable-health.php", { headers: { Accept: "application/json" } });
+     const response = await fetch("api/airtable-health.php", { headers: { Accept: "application/json" }, credentials: "same-origin", cache: "no-store" });
     const payload = await response.json();
     if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
     setSuperAdminAirtableMessage(payload.connected ? "Połączenie Airtable działa." : (payload.reason || "Airtable nie odpowiada."), !payload.connected);
@@ -2120,7 +2280,7 @@ async function loadSuperAdminSyncSettings() {
   if (!superAdminAuthorized) return;
   renderSuperAdminSyncFamilies();
   try {
-    const response = await fetch("api/sync-settings.php", { headers: { Accept: "application/json" } });
+     const response = await fetch("api/sync-settings.php", { headers: { Accept: "application/json" }, credentials: "same-origin", cache: "no-store" });
     const payload = await response.json();
     if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
     const settings = payload.settings || {};
@@ -2135,7 +2295,7 @@ async function loadSuperAdminSyncSettings() {
 
 async function applyGlobalSyncSettings() {
   try {
-    const response = await fetch("api/sync-settings.php", { headers: { Accept: "application/json" } });
+     const response = await fetch("api/sync-settings.php", { headers: { Accept: "application/json" }, credentials: "same-origin", cache: "no-store" });
     const payload = await response.json();
     if (!response.ok || !payload.success) return;
     const settings = payload.settings || {};
@@ -2149,7 +2309,7 @@ async function applyGlobalSyncSettings() {
 async function saveSuperAdminSyncSettings() {
   if (!superAdminAuthorized) return;
   try {
-    const response = await fetch("api/sync-settings.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+     const response = await fetch("api/sync-settings.php", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify({
       mode: superAdminSyncMode?.value || "manual", weeks: superAdminSyncWeeks?.value || 0, days: superAdminSyncDays?.value || 0,
       hours: superAdminSyncHours?.value || 0, minutes: superAdminSyncMinutes?.value || 0,
     }) });
@@ -2163,7 +2323,7 @@ async function runSuperAdminSync() {
   if (!superAdminAuthorized || !superAdminSyncFamily?.value) { setSuperAdminSyncMessage("Wybierz rodzinę.", true); return; }
   setSuperAdminSyncMessage("Synchronizacja…");
   try {
-    const response = await fetch("api/admin-sync.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ family: superAdminSyncFamily.value }) });
+     const response = await fetch("api/admin-sync.php", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify({ family: superAdminSyncFamily.value }) });
     const payload = await response.json();
     if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
     setSuperAdminSyncMessage(`Zsynchronizowano rekordów: ${payload.records ?? 0}.`);
@@ -2261,6 +2421,7 @@ async function loadItems() {
     } else {
       items = [];
       userSettings = { ...DEFAULT_USER_SETTINGS };
+      applyAccountTheme();
     }
   }
 
@@ -2494,6 +2655,7 @@ function fillUserSettingsForm() {
   if (allProductsCategoryGroupingCheckbox) {
     allProductsCategoryGroupingCheckbox.checked = userViewSettings.groupAllProductsByCategory !== false;
   }
+  if (darkThemeToggle) darkThemeToggle.checked = userSettings.theme === "dark";
   if (shoppingMoveOnSelectionCheckbox) {
     shoppingMoveOnSelectionCheckbox.checked = userViewSettings.moveOnSelection === true;
   }
@@ -2512,7 +2674,9 @@ async function saveUserSettings() {
     showMacroDiary: macroVisibleDiaryCheckbox ? macroVisibleDiaryCheckbox.checked : userSettings.showMacroDiary,
     hideDiary: diaryTabVisibleCheckbox ? !diaryTabVisibleCheckbox.checked : userSettings.hideDiary,
     showShoppingOwnerInfo: shoppingOwnerVisibleCheckbox ? shoppingOwnerVisibleCheckbox.checked : userSettings.showShoppingOwnerInfo,
+    theme: darkThemeToggle?.checked ? "dark" : "light",
   });
+  applyAccountTheme();
   userViewSettings = normalizeUserViewSettings({
     groupShoppingByCategory: shoppingCategoryGroupingCheckbox ? shoppingCategoryGroupingCheckbox.checked : userViewSettings.groupShoppingByCategory,
     groupAllProductsByCategory: allProductsCategoryGroupingCheckbox ? allProductsCategoryGroupingCheckbox.checked : userViewSettings.groupAllProductsByCategory,
@@ -3803,6 +3967,7 @@ function setActiveTab(tab) {
   if (nextTab === "shop" || nextTab === "all" || nextTab === "diary") renderItems();
 
   if (nextTab === "settings") {
+    setSettingsSection(activeSettingsSection);
     fillUserSettingsForm();
     refreshSyncSection();
     setAdminVisibility();
@@ -3908,11 +4073,16 @@ async function attemptLogin() {
     const response = await fetch(`${ACCOUNTS_STORAGE_URL}?${getFamilyQueryPart()}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
       body: JSON.stringify({ action: "login", username: loginValue, password: passwordValue }),
     });
     accountPayload = await response.json();
     if (!response.ok || !accountPayload.success) {
-      throw new Error(accountPayload.error || "Nieprawidłowy login lub hasło.");
+      if (response.status === 429) throw new Error("Zbyt wiele prób logowania. Spróbuj ponownie później.");
+      if (response.status === 403) throw new Error("Dostęp do tej rodziny jest obecnie zablokowany.");
+      if (response.status === 401) throw new Error("Nieprawidłowy login lub hasło.");
+      throw new Error(accountPayload.error || `Nie udało się zalogować (HTTP ${response.status}).`);
     }
   } catch (error) {
     loginError.textContent = error.message || "Błąd logowania.";
@@ -3972,10 +4142,13 @@ function showLoginScreen() {
   shoppingSortMode = "created";
   loginError.textContent = "";
   userSettings = { ...DEFAULT_USER_SETTINGS };
+  applyAccountTheme();
   setUserSettingsStatus("");
   setSyncStatus("");
   setConnectionStatus("nie sprawdzono");
   setAccountsStatus("");
+  canManageFamilyAdmins = false;
+  primaryFamilyAdminUsername = "";
   renderAccounts([]);
   setActiveAdminTab("airtable");
 }
@@ -4105,11 +4278,17 @@ syncMinutesInput?.addEventListener("change", () => {
 syncNowButton?.addEventListener("click", () => {
   void syncToAirtable(true);
 });
+darkThemeToggle?.addEventListener("change", () => {
+  userSettings = normalizeSettings({ ...userSettings, theme: darkThemeToggle.checked ? "dark" : "light" });
+  applyAccountTheme();
+});
 superAdminAirtableSaveButton?.addEventListener("click", () => void saveSuperAdminAirtableConfig());
 superAdminAirtableTestButton?.addEventListener("click", () => void testSuperAdminAirtable());
 superAdminSyncSaveButton?.addEventListener("click", () => void saveSuperAdminSyncSettings());
 superAdminSyncNowButton?.addEventListener("click", () => void runSuperAdminSync());
 familyEditPasswordSaveButton?.addEventListener("click", () => void setFamilyAdminPassword());
+familyEditAdminPasswordToggle?.addEventListener("click", () => togglePasswordField(familyEditAdminPasswordInput, familyEditAdminPasswordToggle));
+familyEditAdminPasswordConfirmToggle?.addEventListener("click", () => togglePasswordField(familyEditAdminPasswordConfirmInput, familyEditAdminPasswordConfirmToggle));
 changeOwnPasswordButton?.addEventListener("click", () => void changeOwnPassword());
 superAdminTabButtons.forEach((button) => {
   button.addEventListener("click", () => setActiveSuperAdminTab(button.dataset.superAdminTab || "families"));
@@ -4143,6 +4322,8 @@ adminTabButtons.forEach((button) => {
     setActiveAdminTab(button.dataset.adminTab || "airtable");
   });
 });
+settingsUserTab?.addEventListener("click", () => setSettingsSection("user"));
+settingsAdminTab?.addEventListener("click", () => setSettingsSection("admin"));
 
 window.addEventListener("online", () => {
   void trySyncPendingData();

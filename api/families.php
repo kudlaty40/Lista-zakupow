@@ -2,6 +2,7 @@
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/backup.php';
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, private');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
@@ -112,10 +113,22 @@ function migrateLegacyDataIfNeeded($storageDir, $indexFile, &$index) {
         return;
     }
 
+    $migratedAccounts = [];
     if (file_exists($legacyAccountsFile)) {
         @copy($legacyAccountsFile, $familyDir . '/user-accounts.json');
+        $migratedAccounts = readJsonFile($familyDir . '/user-accounts.json', []);
     } else {
         writeJsonFile($familyDir . '/user-accounts.json', []);
+    }
+
+    // Keep the existing login exactly as stored. This is only metadata for
+    // the family index; it must never invent or normalize an account name.
+    $adminUsername = '';
+    foreach ($migratedAccounts as $account) {
+        if (($account['isAdmin'] ?? false) === true && isset($account['username'])) {
+            $adminUsername = (string) $account['username'];
+            break;
+        }
     }
 
     $rootJsonFiles = glob($storageDir . '/*.json');
@@ -133,7 +146,7 @@ function migrateLegacyDataIfNeeded($storageDir, $indexFile, &$index) {
         'name' => 'Migracja',
         'slug' => $familySlug,
         'createdAt' => gmdate('c'),
-        'adminUsername' => 'bartek',
+        'adminUsername' => $adminUsername,
     ];
     writeJsonFile($indexFile, $index);
 }
@@ -206,6 +219,7 @@ if ($action === 'super_admin_login') {
     }
     appStartSession();
     session_regenerate_id(true);
+    $_SESSION = [];
     $_SESSION['super_admin'] = true;
     appTouchSession();
     appClearRateLimit('account-login', $accountRateKey);
@@ -245,9 +259,7 @@ if ($action === 'set_last_selected_family') {
 }
 
 function validAccountPassword($password) {
-    return strlen((string) $password) >= 8
-        && preg_match('/\d/', (string) $password)
-        && preg_match('/[^A-Za-z0-9]/', (string) $password);
+    return appValidatePassword($password);
 }
 
 if ($action === 'super_admin_logout') {
@@ -266,32 +278,100 @@ if ($action === 'super_admin_logout') {
 
 appRequireSuperAdmin();
 
+if ($action === 'get_family_admins') {
+    $familySlug = normalizeFamilySlug($payload['familySlug'] ?? '');
+    if ($familySlug === '') {
+        jsonError(400, 'Wybierz rodzinę.');
+    }
+
+    $familyExists = false;
+    foreach ($index['families'] as $family) {
+        if (($family['slug'] ?? '') === $familySlug) {
+            $familyExists = true;
+            break;
+        }
+    }
+    if (!$familyExists) {
+        jsonError(404, 'Nie znaleziono wybranej rodziny.');
+    }
+
+    $accountsFile = $storageDir . '/families/' . $familySlug . '/user-accounts.json';
+    if (!is_file($accountsFile)) {
+        jsonError(404, 'Nie znaleziono kont wybranej rodziny.');
+    }
+    $accounts = readJsonFile($accountsFile, []);
+    $admins = [];
+    foreach ($accounts as $account) {
+        if (($account['isAdmin'] ?? false) !== true) continue;
+        $admins[] = [
+            'username' => (string) ($account['username'] ?? ''),
+            'displayName' => (string) ($account['displayName'] ?? ''),
+        ];
+    }
+    if (!$admins) {
+        jsonError(404, 'Rodzina nie ma administratorów.');
+    }
+
+    echo json_encode(['success' => true, 'family' => $familySlug, 'admins' => $admins], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if ($action === 'set_family_admin_password') {
     $familySlug = normalizeFamilySlug($payload['familySlug'] ?? '');
+    $username = normalizeUsername($payload['username'] ?? '');
     $newPassword = trim((string) ($payload['password'] ?? ''));
-    if ($familySlug === '' || !validAccountPassword($newPassword)) {
-        jsonError(400, 'Wybierz rodzinę i podaj hasło o długości co najmniej 8 znaków, z cyfrą i znakiem specjalnym.');
+    if ($familySlug === '' || $username === '' || !validAccountPassword($newPassword)) {
+        jsonError(400, 'Wybierz rodzinę, administratora i podaj hasło o długości co najmniej 8 znaków, z cyfrą i znakiem specjalnym.');
     }
+    $familyExists = false;
+    foreach ($index['families'] as $family) {
+        if (($family['slug'] ?? '') === $familySlug) {
+            $familyExists = true;
+            break;
+        }
+    }
+    if (!$familyExists) {
+        jsonError(404, 'Nie znaleziono wybranej rodziny.');
+    }
+
     $familyDir = $storageDir . '/families/' . $familySlug;
+    if (!is_dir($familyDir)) {
+        jsonError(404, 'Brak katalogu danych wybranej rodziny.');
+    }
     $accountsFile = $familyDir . '/user-accounts.json';
     $accounts = readJsonFile($accountsFile, []);
-    if (!is_array($accounts) || !$accounts) jsonError(404, 'Nie znaleziono kont rodziny.');
-    $adminUsername = '';
-    foreach ($index['families'] as $family) {
-        if (($family['slug'] ?? '') === $familySlug) { $adminUsername = (string) ($family['adminUsername'] ?? ''); break; }
-    }
+    if (!is_array($accounts) || !array_is_list($accounts) || !$accounts) jsonError(500, 'Plik kont rodziny ma nieprawidłowy format.');
     $position = -1;
     foreach ($accounts as $i => $account) {
-        if ($adminUsername !== '' && ($account['username'] ?? '') === $adminUsername) { $position = $i; break; }
-        if ($position < 0 && ($account['isAdmin'] ?? false) === true) $position = $i;
+        if (($account['username'] ?? '') === $username && ($account['isAdmin'] ?? false) === true) {
+            $position = $i;
+            break;
+        }
     }
-    if ($position < 0) jsonError(404, 'Nie znaleziono administratora rodziny.');
+    if ($position < 0) jsonError(404, 'Nie znaleziono administratora o podanym loginie w tej rodzinie.');
     appBackupBeforeMutation('family-admin-password');
     $accounts[$position]['password'] = appPasswordHash($newPassword);
-    if (!appAtomicWrite($accountsFile, json_encode($accounts, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))) {
+    $encodedAccounts = json_encode(array_values($accounts), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($encodedAccounts) || !appAtomicWrite($accountsFile, $encodedAccounts)) {
         jsonError(500, 'Nie udało się zapisać nowego hasła.');
     }
-    echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+    $verifiedAccounts = readJsonFile($accountsFile, []);
+    if (!is_array($verifiedAccounts) || !array_is_list($verifiedAccounts)) {
+        jsonError(500, 'Nie udało się potwierdzić formatu pliku kont po zapisie.');
+    }
+    $verifiedHash = $verifiedAccounts[$position]['password'] ?? '';
+    $verifiedAlgorithm = is_string($verifiedHash) ? password_get_info($verifiedHash)['algoName'] : '';
+    if (!is_string($verifiedHash) || !password_verify($newPassword, $verifiedHash) || $verifiedAlgorithm !== 'bcrypt') {
+        jsonError(500, 'Nie udało się potwierdzić zapisu nowego hasła.');
+    }
+    appClearRateLimit('account-login', $familySlug . ':' . $username);
+    echo json_encode([
+        'success' => true,
+        'family' => $familySlug,
+        'username' => $accounts[$position]['username'] ?? '',
+        'passwordVerified' => true,
+        'accountRateLimitCleared' => true,
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -302,8 +382,8 @@ if ($action === 'change_super_admin_password') {
     if (!validateSuperAdminPassword($index, $oldPassword)) {
         jsonError(401, 'Nieprawidłowe obecne hasło administratora globalnego.');
     }
-    if (strlen($newPassword) < 12) {
-        jsonError(400, 'Nowe hasło administratora globalnego jest wymagane.');
+    if (!validAccountPassword($newPassword)) {
+        jsonError(400, 'Nowe hasło musi mieć co najmniej 8 znaków, cyfrę i znak specjalny.');
     }
 
     $index['superAdminPassword'] = appPasswordHash($newPassword);

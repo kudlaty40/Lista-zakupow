@@ -70,9 +70,9 @@
               <div class="super-admin-card-header"><span class="super-admin-card-icon">👨‍👩‍👧</span><div><h2>Dodaj nową rodzinę</h2><p>Utwórz rodzinę i jej pierwsze konto administracyjne.</p></div></div>
               <div class="admin-config-grid">
                 <label class="field-name">Nazwa rodziny<input id="new-family-name" type="text" placeholder="np. Rodzina Kowalskich" /></label>
-                <label class="field-name">Login pierwszego administratora<input id="new-family-admin-username" type="text" placeholder="np. bartek" /></label>
+                <label class="field-name">Login pierwszego administratora<input id="new-family-admin-username" type="text" placeholder="np. administrator" /></label>
                 <label class="field-name">Hasło pierwszego administratora<input id="new-family-admin-password" type="password" placeholder="Hasło" /></label>
-                <label class="field-name">Nazwa wyświetlana administratora<input id="new-family-admin-display" type="text" placeholder="np. Bartek" /></label>
+                <label class="field-name">Nazwa wyświetlana administratora<input id="new-family-admin-display" type="text" placeholder="np. Administrator" /></label>
               </div>
               <div class="admin-actions"><button id="create-family-button" type="button">Utwórz rodzinę</button></div>
             </article>
@@ -150,12 +150,18 @@
             <input id="family-edit-admin-display" type="text" />
           </label>
           <label class="field-name">
+            Administrator do zmiany hasła
+            <select id="family-edit-admin-target">
+              <option value="">Wczytywanie administratorów…</option>
+            </select>
+          </label>
+          <label class="field-name">
             Nowe hasło administratora rodziny
-            <input id="family-edit-admin-password" type="password" autocomplete="new-password" />
+            <span class="password-field"><input id="family-edit-admin-password" type="password" autocomplete="new-password" /><button id="family-edit-admin-password-toggle" type="button" class="password-toggle" aria-label="Pokaż nowe hasło" aria-pressed="false">Pokaż</button></span>
           </label>
           <label class="field-name">
             Powtórz nowe hasło
-            <input id="family-edit-admin-password-confirm" type="password" autocomplete="new-password" />
+            <span class="password-field"><input id="family-edit-admin-password-confirm" type="password" autocomplete="new-password" /><button id="family-edit-admin-password-confirm-toggle" type="button" class="password-toggle" aria-label="Pokaż powtórzone hasło" aria-pressed="false">Pokaż</button></span>
           </label>
         </div>
         <div class="admin-actions">
@@ -163,6 +169,7 @@
           <button id="family-edit-password-save" type="button" class="secondary">Nadaj nowe hasło</button>
           <button id="family-edit-cancel" type="button" class="secondary">Anuluj</button>
         </div>
+        <p id="family-edit-password-status" class="panel-note" role="status" aria-live="polite"></p>
       </div>
     </div>
 
@@ -286,7 +293,12 @@
           <h2>Ustawienia użytkownika</h2>
         </div>
         <p class="panel-note">Ustawienia są zapisywane osobno dla każdego konta.</p>
+        <div class="settings-section-tabs" role="tablist" aria-label="Sekcje ustawień">
+          <button id="settings-user-tab" type="button" class="settings-section-tab active" role="tab" aria-selected="true">Ustawienia użytkownika</button>
+          <button id="settings-admin-tab" type="button" class="settings-section-tab" role="tab" aria-selected="false">Narzędzia administratora</button>
+        </div>
 
+        <div id="user-settings-panel">
         <div class="settings-card-grid">
           <article class="settings-card settings-card--nutrition">
             <div class="settings-card-header"><span class="settings-card-icon">🥗</span><div><h3>Makro i odżywianie</h3><p>Wybierz sposób prezentowania wartości odżywczych.</p></div></div>
@@ -320,15 +332,20 @@
             <div class="settings-card-header"><span class="settings-card-icon">📦</span><div><h3>Widok produktów</h3><p>Ułatw sobie przeglądanie dużej liczby produktów.</p></div></div>
             <label class="settings-toggle"><input id="all-products-category-grouping" type="checkbox" checked />Grupuj „Wszystkie produkty” według kategorii</label>
           </article>
+          <article class="settings-card settings-card--appearance">
+            <div class="settings-card-header"><span class="settings-card-icon">🌙</span><div><h3>Wygląd aplikacji</h3><p>Wybierz jasny lub ciemny widok tylko dla tego konta.</p></div></div>
+            <label class="settings-toggle"><input id="dark-theme-toggle" type="checkbox" />Ciemny wygląd aplikacji</label>
+          </article>
         </div>
 
         <div class="admin-actions"><button id="save-user-settings-button" type="button">Zapisz ustawienia</button></div>
         <p id="user-settings-status" class="panel-note"></p>
+        </div>
         <div id="admin-tools" class="admin-tools hidden">
           <div class="panel-header">
             <h2>Narzędzia administratora</h2>
           </div>
-          <p class="panel-note">Dostęp po zalogowaniu hasłem konta administratora (np. Bartek).</p>
+          <p class="panel-note">Dostęp po zalogowaniu hasłem konta administratora tej rodziny.</p>
 
           <div class="admin-tabs" role="tablist" aria-label="Kategorie narzędzi administratora">
             <button id="admin-tab-accounts" type="button" class="admin-tab-button" data-admin-tab="accounts">Konta</button>
