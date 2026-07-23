@@ -413,6 +413,10 @@ button.secondary.small {
   z-index: 1000;
 }
 
+.photo-source-menu {
+  z-index: 2400;
+}
+
 .modal-overlay.hidden {
   display: none;
 }
@@ -1123,6 +1127,25 @@ html[data-theme="dark"] .settings-card:hover {
   color: var(--primary-strong);
   font-weight: 700;
   font-size: 0.95rem;
+  position: relative;
+}
+
+.image-status-dot {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--card);
+  border-radius: 50%;
+}
+
+.image-status-dot--success {
+  background: #16a34a;
+}
+
+.image-status-dot--error {
+  background: #dc2626;
 }
 
 .item-name {
@@ -1143,6 +1166,31 @@ html[data-theme="dark"] .settings-card:hover {
   line-height: 1.2;
   max-height: 2.4em;
   font-weight: 600;
+}
+
+.image-sync-progress {
+  display: grid;
+  gap: 3px;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.1;
+}
+
+.image-sync-progress-track {
+  display: block;
+  width: min(220px, 100%);
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.16);
+}
+
+.image-sync-progress-value {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
 }
 
 .item-row-meta {
@@ -1293,6 +1341,15 @@ html[data-theme="dark"] .settings-card:hover {
 .image-preview-actions {
   display: grid;
   gap: 10px;
+  position: relative;
+  z-index: 2;
+}
+
+.image-preview-status {
+  min-height: 1.35em;
+  margin: 0;
+  color: #fff;
+  font-size: 0.95rem;
 }
 
 .image-preview-action,
@@ -1321,6 +1378,13 @@ html[data-theme="dark"] .settings-card:hover {
 
 .image-preview-delete:hover {
   background: rgba(255, 255, 255, 0.28);
+}
+
+.image-preview-action,
+.image-preview-delete,
+.image-preview-close {
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .image-preview-overlay.hidden {

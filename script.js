@@ -195,6 +195,7 @@ let selectedFamily = "";
 let families = [];
 const collapsedCategorySections = new Set();
 const expandedProductActions = new Set();
+const imageTransferStates = new Map();
 let superAdminAuthorized = false;
 let editingFamilySlug = "";
 let editingAccountUsername = "";
@@ -207,6 +208,17 @@ let diaryServerRevision = "";
 let syncDebounceTimer = null;
 let allProductsLimit = 75;
 let legacyImageMigrationActive = false;
+
+function setImageTransferState(itemId, state, message = "") {
+  const key = String(itemId || "");
+  if (!key) return;
+  imageTransferStates.set(key, { state, message });
+  if (typeof renderItems === "function") renderItems();
+}
+
+function getImageTransferState(item) {
+  return imageTransferStates.get(String(item?.id || "")) || null;
+}
 
 function openOfflineDatabase() {
   return new Promise((resolve, reject) => {
@@ -418,6 +430,67 @@ function getOfflineOperationsKey() {
 
 function getOfflineImageKey(itemId) {
   return `image:${getActiveFamily() || "default"}:${String(itemId || "")}`;
+}
+
+function makePhotoOperationId(itemId) {
+  const randomPart = globalThis.crypto?.randomUUID?.().replaceAll("-", "") || Math.random().toString(36).slice(2);
+  return `photo-${String(itemId || "item")}-${Date.now()}-${randomPart}`;
+}
+
+async function getPendingPhotoRecord(item, imageData) {
+  const key = getOfflineImageKey(item?.id);
+  const existing = await offlineDbRead(key).catch(() => null);
+  if (existing && typeof existing === "object" && existing.data === imageData && existing.imageId && existing.photoOperationId) return existing;
+  const record = {
+    data: imageData,
+    imageId: `image-${item.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    photoOperationId: makePhotoOperationId(item?.id),
+  };
+  await offlineDbWrite(key, record);
+  return record;
+}
+
+function getOfflineImageDeletesKey() {
+  return `image-deletes:${getActiveFamily() || "default"}`;
+}
+
+async function queueOfflineImageDelete(item) {
+  if (!item?.id || !item?.imageId) return;
+  const key = getOfflineImageDeletesKey();
+  const pending = await offlineDbRead(key).catch(() => []);
+  const next = Array.isArray(pending) ? pending.filter((entry) => String(entry?.productId) !== String(item.id)) : [];
+  next.push({ productId: String(item.id), imageId: String(item.imageId) });
+  await offlineDbWrite(key, next);
+}
+
+async function flushOfflineImageDeletes() {
+  if (!navigator.onLine) return false;
+  const key = getOfflineImageDeletesKey();
+  const pending = await offlineDbRead(key).catch(() => []);
+  if (!Array.isArray(pending) || pending.length === 0) return true;
+  const remaining = [];
+  for (const entry of pending) {
+    try {
+      const result = await deleteProductImage({ id: entry.productId, imageId: entry.imageId }, { queueOffline: false });
+      if (!result) remaining.push(entry);
+      else {
+        const localItem = items.find((item) => String(item?.id) === String(entry.productId));
+        if (localItem) {
+          localItem.image = null;
+          localItem.imageId = null;
+          localItem.imageStatus = "deleted";
+        }
+      }
+    } catch {
+      remaining.push(entry);
+    }
+  }
+  if (remaining.length > 0) {
+    await offlineDbWrite(key, remaining);
+    return false;
+  }
+  await offlineDbDelete(key);
+  return true;
 }
 
 function getSharedRevisionStorageKey() {
@@ -705,6 +778,7 @@ function normalizeItems(rawItems) {
 
     return {
       ...item,
+      imageStatus: item.imageStatus || (item.imageId ? "ready" : "deleted"),
       category: String(item.category || "").trim().slice(0, 60),
       selected: item.selected === true,
       lastQuantity: item.lastQuantity ?? item.quantity,
@@ -2387,7 +2461,8 @@ async function runSuperAdminSync() {
   } catch (error) { setSuperAdminSyncMessage(`Błąd synchronizacji: ${error.message}`, true); }
 }
 
-async function saveItems() {
+async function saveItems(options = {}) {
+  const skipSharedQueue = options.skipSharedQueue === true;
   const user = getActiveUser();
   const sharedPayload = buildSharedPayload();
   const diaryPayload = buildDiaryPayload();
@@ -2395,15 +2470,15 @@ async function saveItems() {
   // Large payloads (especially photos in older records) must not block the UI
   // through synchronous localStorage serialization. IndexedDB is the primary
   // offline store; localStorage contains only small state flags and revisions.
-  markPendingSharedSync();
+  if (!skipSharedQueue) markPendingSharedSync();
   markPendingDiarySync(user);
 
   const writeTask = offlineWriteChain.then(async () => {
     const previousSharedPayload = await getCachedPayload("shared", user);
     await cachePayload("shared", sharedPayload, user);
     await cachePayload("diary", diaryPayload, user);
-    const queuedOperations = await getQueuedOperations();
-    const nextOperations = buildSharedOperations(previousSharedPayload, sharedPayload);
+    const queuedOperations = skipSharedQueue ? [] : await getQueuedOperations();
+    const nextOperations = skipSharedQueue ? [] : buildSharedOperations(previousSharedPayload, sharedPayload);
     if (nextOperations.length > 0) {
       await setQueuedOperations([...queuedOperations, ...nextOperations]);
     }
@@ -2547,9 +2622,10 @@ async function trySyncPendingData(skipWriteWait = false) {
   const user = getActiveUser();
   const pendingShared = hasPendingSharedSync();
   const pendingDiary = hasPendingDiarySync(user);
+  const imageDeletesSynced = navigator.onLine ? await flushOfflineImageDeletes() : false;
 
   if (!pendingShared && !pendingDiary) {
-    return true;
+    return imageDeletesSynced;
   }
   if (!navigator.onLine) {
     return false;
@@ -3421,6 +3497,14 @@ function createItemRow(item, order, isPurchased, section = "shop") {
   const orderBadge = document.createElement("div");
   orderBadge.className = "item-order";
   orderBadge.textContent = order;
+  const imageState = getImageTransferState(item);
+  if (imageState?.state === "success" || imageState?.state === "error") {
+    const statusDot = document.createElement("span");
+    statusDot.className = `image-status-dot image-status-dot--${imageState.state}`;
+    statusDot.title = imageState.message || (imageState.state === "success" ? "Zdjęcie dostępne" : "Zdjęcie niedostępne");
+    statusDot.setAttribute("aria-label", statusDot.title);
+    orderBadge.appendChild(statusDot);
+  }
 
   const name = document.createElement("div");
   name.className = "item-name";
@@ -3428,6 +3512,24 @@ function createItemRow(item, order, isPurchased, section = "shop") {
   nameText.className = "item-name-text";
   nameText.textContent = item.name;
   name.appendChild(nameText);
+  if (imageState?.state === "uploading" || imageState?.state === "downloading") {
+    const progress = document.createElement("div");
+    progress.className = "image-sync-progress";
+    progress.setAttribute("role", "status");
+    progress.setAttribute("aria-live", "polite");
+    const progressLabel = document.createElement("span");
+    progressLabel.textContent = imageState.state === "uploading"
+      ? "Synchronizacja zdjęcia — 100%"
+      : "Pobieranie zdjęcia — 100%";
+    const progressTrack = document.createElement("span");
+    progressTrack.className = "image-sync-progress-track";
+    const progressValue = document.createElement("span");
+    progressValue.className = "image-sync-progress-value";
+    progressValue.style.width = "100%";
+    progressTrack.appendChild(progressValue);
+    progress.append(progressLabel, progressTrack);
+    name.appendChild(progress);
+  }
 
   if (section === "all") {
     const category = document.createElement("div");
@@ -3680,55 +3782,180 @@ function readImageFile(file, onLoad) {
 }
 
 function getProductImageUrl(item) {
-  if (item?.image) {
-    return item.image;
-  }
+  if (item?.imageStatus !== "ready") return "";
   if (item?.imageId) {
-    return `${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}&id=${encodeURIComponent(item.imageId)}`;
+    const version = item.imageUpdatedAt ? `&v=${encodeURIComponent(item.imageUpdatedAt)}` : "";
+    return `${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}&id=${encodeURIComponent(item.imageId)}${version}`;
   }
-  return item?.image || "";
+  return "";
+}
+
+function dataUrlToBlob(dataUrl) {
+  const value = String(dataUrl || "");
+  const match = value.match(/^data:([^;,]+)?;base64,(.*)$/s);
+  if (!match) {
+    throw new Error("Nieprawidłowy bufor zdjęcia.");
+  }
+  const mime = match[1] || "application/octet-stream";
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mime });
 }
 
 async function uploadProductImage(item, imageData) {
+  if (item?.id) setImageTransferState(item.id, "uploading", "Synchronizacja zdjęcia");
   if (!item || !imageData || !navigator.onLine) {
     if (item && imageData) {
       item.image = imageData;
-      await offlineDbWrite(getOfflineImageKey(item.id), imageData).catch(() => undefined);
+      item.imageStatus = "pending";
+      const pending = await getPendingPhotoRecord(item, imageData).catch(() => null);
+      if (pending) {
+        item.photoOperationId = pending.photoOperationId;
+        item.imageId = pending.imageId;
+      }
     }
+    if (item?.id) setImageTransferState(item.id, "error", "Zdjęcie oczekuje na połączenie z internetem");
     return false;
   }
   try {
-    const response = await fetch(imageData);
-    const blob = await response.blob();
-    const imageId = item.imageId || `image-${item.id}-${Date.now()}`;
+    const pending = await getPendingPhotoRecord(item, imageData);
+    // Nie używamy fetch(data:...), ponieważ mobilne przeglądarki odrzucają
+    // duże adresy data URL błędem „Failed to fetch”. Bufor został już
+    // zoptymalizowany w readImageFile(), więc konwertujemy go bezpośrednio.
+    const blob = dataUrlToBlob(imageData);
+    const imageId = pending.imageId;
     const body = new FormData();
+    body.append("action", "upload-link");
+    body.append("productId", String(item.id));
+    body.append("product", JSON.stringify({ ...item, image: null }));
     body.append("id", imageId);
+    body.append("photoOperationId", pending.photoOperationId);
     body.append("family", getActiveFamily());
     body.append("image", blob, "product.webp");
-    const upload = await fetch(`${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}`, { method: "POST", body });
+    const upload = await fetch(`${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}`, {
+      method: "POST",
+      body,
+      credentials: "same-origin",
+      cache: "no-store",
+    });
     const payload = await upload.json();
     if (!upload.ok || !payload.success) throw new Error(payload.error || "Nie udało się przesłać zdjęcia.");
+    if (payload.status !== "completed") {
+      const pendingError = new Error("Zdjęcie zapisano lokalnie, ale oczekuje na potwierdzenie Airtable.");
+      pendingError.pendingRetry = true;
+      throw pendingError;
+    }
     item.imageId = payload.imageId;
+    item.imageUpdatedAt = payload.imageUpdatedAt || new Date().toISOString();
+    item.imageStatus = "ready";
+    item.photoOperationId = pending.photoOperationId;
     item.image = null;
+    item._pendingImageUpload = false;
     await offlineDbDelete(getOfflineImageKey(item.id)).catch(() => undefined);
-    await saveItems();
-    return true;
+    await saveItems({ skipSharedQueue: true });
+    const sharedConfirmed = await verifySharedImageOnServer(item);
+    if (sharedConfirmed) {
+      setImageTransferState(item.id, "success", "Zdjęcie dostępne dla członków rodziny");
+      setSyncStatus("Zdjęcie zapisano i udostępniono członkom rodziny.");
+      return true;
+    }
+    setSyncStatus("Zdjęcie zapisano, ale oczekuje na potwierdzenie wspólnej listy.", true);
+    setImageTransferState(item.id, "error", "Zdjęcie nie zostało jeszcze potwierdzone rodzinie");
+    return false;
   } catch (error) {
     item.image = imageData;
+    item.imageStatus = "pending";
+    item._pendingImageUpload = true;
     await offlineDbWrite(getOfflineImageKey(item.id), imageData).catch(() => undefined);
+    if (item?.id) setImageTransferState(item.id, "error", "Nie udało się wysłać zdjęcia");
     throw error;
   }
 }
 
-async function deleteProductImage(item) {
-  if (!item?.imageId || !navigator.onLine) return false;
+async function ensureImageOperationQueued(item, attempt) {
+  if (!item?.id || !item?.imageId) return;
+  const operations = await getQueuedOperations();
+  const alreadyQueued = operations.some((operation) => (
+    operation?.type === "upsert-item"
+    && String(operation?.item?.id || "") === String(item.id)
+    && String(operation?.item?.imageId || "") === String(item.imageId)
+  ));
+  if (alreadyQueued) return;
+  const copy = { ...item, image: null };
+  operations.push({
+    id: `image-sync-${item.id}-${item.imageId}-${Date.now()}-${attempt}`,
+    type: "upsert-item",
+    item: copy,
+    updatedAt: new Date().toISOString(),
+  });
+  await setQueuedOperations(operations);
+  markPendingSharedSync();
+}
+
+async function refreshSharedRevisionForImageSync() {
+  if (!navigator.onLine) return false;
+  try {
+    const response = await fetch(`${getSharedStorageUrl()}&fresh=${Date.now()}`, {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) return false;
+    const payload = await response.json();
+    if (typeof payload?.revision === "string" && payload.revision) {
+      sharedServerRevision = payload.revision;
+      localStorage.setItem(getSharedRevisionStorageKey(), sharedServerRevision);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function verifySharedImageOnServer(item) {
+  if (!item?.id || !item?.imageId || !navigator.onLine) return false;
+  try {
+    const response = await fetch(`${getSharedStorageUrl()}&verify=${Date.now()}`, {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) return false;
+    const payload = await response.json();
+    const source = payload?.data ?? payload;
+    const serverItems = Array.isArray(source?.items) ? source.items : [];
+    const serverItem = serverItems.find((entry) => String(entry?.id || "") === String(item.id));
+    return String(serverItem?.imageId || "") === String(item.imageId);
+  } catch (error) {
+    console.warn("Weryfikacja synchronizacji zdjęcia nie powiodła się:", error?.message || "unknown");
+    return false;
+  }
+}
+
+async function deleteProductImage(item, options = {}) {
+  if (!item?.imageId) return true;
+  if (!navigator.onLine) {
+    if (options.queueOffline !== false) await queueOfflineImageDelete(item);
+    return false;
+  }
   const body = new FormData();
-  body.append("action", "delete");
+  body.append("action", "delete-link");
   body.append("id", item.imageId);
+  body.append("productId", String(item.id || ""));
   body.append("family", getActiveFamily());
-  const response = await fetch(`${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}`, { method: "POST", body });
+  const response = await fetch(`${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}`, { method: "POST", body, credentials: "same-origin", cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload.success) throw new Error(payload.error || "Nie udało się usunąć zdjęcia.");
+  if (payload.status !== "completed") {
+    await queueOfflineImageDelete(item);
+    return false;
+  }
+  if (payload.removed === false) {
+    setSyncStatus("Zdjęcie zostało już zastąpione nowszym i nie wymaga usuwania.");
+  }
   await offlineDbDelete(getOfflineImageKey(item.id)).catch(() => undefined);
   return true;
 }
@@ -3737,13 +3964,21 @@ async function restorePendingImages() {
   await Promise.all(items.map(async (item) => {
     if (!item?.id || item.image) return;
     const cached = await offlineDbRead(getOfflineImageKey(item.id)).catch(() => null);
-    if (typeof cached === "string" && cached.startsWith("data:image/")) item.image = cached;
+    const record = cached && typeof cached === "object" ? cached : null;
+    const imageData = record?.data || (typeof cached === "string" ? cached : "");
+    if (typeof imageData === "string" && imageData.startsWith("data:image/")) {
+      item.image = imageData;
+      item.imageId = record?.imageId || item.imageId;
+      item.photoOperationId = record?.photoOperationId || item.photoOperationId;
+      item.imageStatus = "pending";
+      item._pendingImageUpload = true;
+    }
   }));
 }
 
 async function migrateLegacyImages() {
   if (legacyImageMigrationActive || !navigator.onLine) return;
-  const legacy = items.filter((item) => typeof item?.image === "string" && item.image.startsWith("data:image/") && !item.imageId);
+  const legacy = items.filter((item) => typeof item?.image === "string" && item.image.startsWith("data:image/") && (!item.imageId || item._pendingImageUpload === true));
   if (legacy.length === 0) return;
   legacyImageMigrationActive = true;
   try {
@@ -3762,7 +3997,7 @@ function openPhotoSourceMenu(onFileSelected) {
 
   const overlay = document.createElement("div");
   overlay.id = "photo-source-menu";
-  overlay.className = "modal-overlay";
+  overlay.className = "modal-overlay photo-source-menu";
   const card = document.createElement("div");
   card.className = "modal-card photo-source-card";
   const title = document.createElement("h2");
@@ -3831,6 +4066,10 @@ function createImagePreviewOverlay() {
 
   const placeholder = document.createElement("div");
   placeholder.className = "image-preview-placeholder hidden";
+  const previewStatus = document.createElement("p");
+  previewStatus.className = "image-preview-status";
+  previewStatus.setAttribute("role", "status");
+  previewStatus.setAttribute("aria-live", "polite");
 
   const actionButton = document.createElement("button");
   actionButton.type = "button";
@@ -3844,9 +4083,13 @@ function createImagePreviewOverlay() {
         renderItems();
         showImagePreview(currentPreviewItem);
         void uploadProductImage(currentPreviewItem, image).then(() => {
+          previewStatus.textContent = "Zdjęcie zapisano i udostępniono rodzinie.";
           renderItems();
           showImagePreview(currentPreviewItem);
-        }).catch((error) => console.warn("Zdjęcie pozostanie lokalnie do kolejnej próby:", error));
+        }).catch((error) => {
+          previewStatus.textContent = `Nie udało się udostępnić zdjęcia: ${error.message}`;
+          setSyncStatus(`Nie udało się udostępnić zdjęcia rodzinie: ${error.message}`, true);
+        });
       });
     });
   });
@@ -3858,20 +4101,27 @@ function createImagePreviewOverlay() {
   deleteButton.addEventListener("click", (event) => {
     event.stopPropagation();
     if (currentPreviewItem) {
-      if (currentPreviewItem.imageId && !navigator.onLine) {
-        setSyncStatus("Usuwanie zdjęcia wymaga połączenia z internetem.", true);
-        return;
-      }
       const target = currentPreviewItem;
-      void deleteProductImage(target).then(() => {
-        target.image = null;
-        target.imageId = null;
-        return saveItems();
+      const expectedImageId = target.imageId;
+      target.image = null;
+      target.imageId = null;
+      target.imageStatus = "pending_delete";
+      previewStatus.textContent = "Usuwanie zdjęcia — synchronizacja…";
+      renderItems();
+      void deleteProductImage({ ...target, imageId: expectedImageId }).then(async (deletedOnline) => {
+        target.imageStatus = deletedOnline ? "deleted" : "pending_delete";
+        previewStatus.textContent = deletedOnline ? "Zdjęcie usunięte." : "Usunięcie zdjęcia oczekuje na synchronizację.";
+        if (!deletedOnline) setSyncStatus("Usunięcie zdjęcia oczekuje na synchronizację.", true);
+        await saveItems({ skipSharedQueue: true });
+      }).catch(async (error) => {
+        await queueOfflineImageDelete({ ...target, imageId: expectedImageId });
+        target.imageStatus = "pending_delete";
+        previewStatus.textContent = `Usunięcie zdjęcia oczekuje na synchronizację: ${error.message}`;
+        setSyncStatus("Usunięcie zdjęcia oczekuje na synchronizację.", true);
+        await saveItems({ skipSharedQueue: true });
       }).then(() => {
         renderItems();
         showImagePreview(target);
-      }).catch((error) => {
-        setSyncStatus(`Nie udało się usunąć zdjęcia: ${error.message}`, true);
       });
     }
   });
@@ -3885,6 +4135,7 @@ function createImagePreviewOverlay() {
   content.className = "image-preview-content";
   content.appendChild(image);
   content.appendChild(placeholder);
+  content.appendChild(previewStatus);
   content.appendChild(actions);
 
   overlay.appendChild(closeButton);
@@ -3908,6 +4159,11 @@ function showImagePreview(item) {
 
   const imageSource = getProductImageUrl(item);
   if (imageSource) {
+    if (item.imageId && !item.image) {
+      setImageTransferState(item.id, "downloading", "Pobieranie zdjęcia");
+      image.addEventListener("load", () => setImageTransferState(item.id, "success", "Zdjęcie pobrane na urządzenie"), { once: true });
+      image.addEventListener("error", () => setImageTransferState(item.id, "error", "Nie udało się pobrać zdjęcia"), { once: true });
+    }
     image.src = imageSource;
     image.classList.remove("hidden");
     placeholder.classList.add("hidden");
@@ -4022,11 +4278,19 @@ function openProductEditor(item) {
       status.textContent = "Zapisywanie produktu i zdjęcia…";
       try {
       if (removePhotoRequested && item.imageId) {
-        if (!navigator.onLine) {
-          throw new Error("Usuwanie zdjęcia wymaga połączenia z internetem");
-        }
-        await deleteProductImage(item);
+        const expectedImageId = item.imageId;
+        item.image = null;
         item.imageId = null;
+        item.imageStatus = "pending_delete";
+        status.textContent = "Usuwanie zdjęcia — synchronizacja…";
+        try {
+          const deletedOnline = await deleteProductImage({ ...item, imageId: expectedImageId });
+          item.imageStatus = deletedOnline ? "deleted" : "pending_delete";
+          if (!deletedOnline) status.textContent = "Usunięcie zdjęcia oczekuje na synchronizację.";
+        } catch (deleteError) {
+          await queueOfflineImageDelete({ ...item, imageId: expectedImageId });
+          status.textContent = `Usunięcie zdjęcia oczekuje na synchronizację: ${deleteError.message}`;
+        }
       }
       item.image = pendingImage;
       if (pendingImage && navigator.onLine) {
@@ -4034,7 +4298,7 @@ function openProductEditor(item) {
       } else if (pendingImage) {
         await offlineDbWrite(getOfflineImageKey(item.id), pendingImage);
       }
-      await saveItems();
+      await saveItems({ skipSharedQueue: removePhotoRequested || Boolean(pendingImage) });
       renderItems();
       overlay.remove();
     } catch (error) {
@@ -4143,7 +4407,9 @@ function addItem() {
   if (pendingNewItemImage) {
     newItem.image = pendingNewItemImage;
     finalize();
-    void uploadProductImage(newItem, pendingNewItemImage).then(() => renderItems()).catch((error) => console.warn("Zdjęcie pozostanie lokalnie do kolejnej próby:", error));
+    void uploadProductImage(newItem, pendingNewItemImage).then(() => renderItems()).catch((error) => {
+      setSyncStatus(`Nie udało się udostępnić zdjęcia rodzinie: ${error.message}`, true);
+    });
   } else {
     finalize();
   }
@@ -4461,7 +4727,7 @@ window.addEventListener("online", () => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js?v=30").catch((error) => {
+    navigator.serviceWorker.register("sw.js?v=42").catch((error) => {
       console.warn("Nie udało się zarejestrować trybu offline:", error);
     });
   });

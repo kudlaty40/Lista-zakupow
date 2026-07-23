@@ -125,3 +125,48 @@ Utworzono snapshot `archives/prechange/20260723T181354Z-admin-images`. Usunięto
 ### Ukrycie karty narzędzi administratora - 2026-07-23
 
 Utworzono snapshot `archives/prechange/20260723T182514Z-hide-admin-tab`. Karta „Narzędzia administratora” jest teraz całkowicie ukrywana dla zwykłych kont, a nie tylko wyłączana. Zachowano kontrolę uprawnień opartą wyłącznie na sesji serwera; cache PWA zwiększono do `v30`. GitHub pozostaje bez zmian.
+
+### Menu zdjęć i synchronizacja zdjęć między urządzeniami - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T184817Z-photo-sync`. Menu wyboru zdjęcia otrzymało warstwę nad podglądem produktu. Po udanym uploadzie klient wymusza próbę synchronizacji `imageId` we wspólnej liście rodziny; przy niedostępnej sieci zachowuje kolejkę offline. Cache PWA zwiększono do `v31`. GitHub pozostaje bez zmian.
+
+### Weryfikacja i ponawianie synchronizacji zdjęć - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T185641Z-photo-sync-retry`. Po uploadzie klient potwierdza `imageId` przez świeży odczyt wspólnej listy i pokazuje status dostępności zdjęcia dla rodziny. Dodano bezpieczny fallback zapisu JPEG/PNG dla hostingu bez GD/WebP oraz zwiększono cache PWA do `v32`. GitHub pozostaje bez zmian.
+
+### Trwałe imageId w danych wspólnej listy - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T190937Z-imageid-family-persistence`. Po uploadzie klient dopisuje gwarantowaną operację `upsert-item` z `imageId`, odświeża rewizję i ponawia synchronizację maksymalnie trzy razy. Sukces wymaga świeżego potwierdzenia `imageId` w danych rodziny. Cache PWA zwiększono do `v33`; GitHub pozostaje bez zmian.
+
+### Pasek postępu i kropka statusu zdjęcia - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T191915Z-photo-progress-status`. Dodano pasek `100%` podczas synchronizacji uploadu/pobierania oraz zieloną lub czerwoną kropkę przy numerze produktu. Status działa w liście zakupów i wszystkich produktach. Cache PWA zwiększono do `v34`; GitHub pozostaje bez zmian.
+
+### Atomowy zapis zdjęcia i imageId - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T192833Z-atomic-image-link`. Dodano akcję `upload-link`, która zapisuje plik zdjęcia i właściwość `imageId` w rodzinnej wspólnej liście. Klient korzysta z tego przepływu dla wszystkich produktów, bez base64 w danych. Cache PWA zwiększono do `v35`; GitHub pozostaje bez zmian.
+
+### Ostatnie zdjęcie wygrywa - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T193553Z-latest-image-wins`. Uploady używają unikalnych identyfikatorów, zapisują `imageUpdatedAt` i są porządkowane blokadą rodziny. Nowe `shared.json` jest zapisywane atomowo, a poprzedni plik zdjęcia jest usuwany dopiero po udanym zapisie. Cache PWA zwiększono do `v36`; GitHub pozostaje bez zmian.
+
+### Stabilna synchronizacja i usuwanie zdjęć - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723-220609-reliable-image-sync`. Dodano dedykowane usuwanie powiązania zdjęcia, ochronę przed starszymi operacjami `upsert-item`, kolejkę usuwania offline oraz widoczny status w podglądzie zdjęcia. Cache PWA zwiększono do `v37`; GitHub pozostaje bez zmian.
+
+### Jedna blokada i potwierdzenie Airtable dla zdjęć - 2026-07-23
+
+Wdrożenie wykorzystuje wspólną blokadę `.shared-sync.lock`, dedykowany moduł Airtable oraz statusy `completed`/`pending_retry`. Obraz jest usuwany dopiero po potwierdzeniu obu zapisów, a nieudane operacje pozostają do ponowienia. Cache PWA zwiększono do `v40`; GitHub pozostaje bez zmian.
+
+### Bufor urządzenia i tombstone zdjęcia - 2026-07-23
+
+Dodano stabilny `photoOperationId`, zapis oczekującego obrazu w IndexedDB oraz `imageStatus` (`pending`, `ready`, `pending_delete`, `deleted`). Zdjęcie jest wyświetlane tylko po pełnym potwierdzeniu w danych rodziny i Airtable.
+### Audyt uploadu zdjęć i poprawka `Failed to fetch` - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723-224215-photo-upload-fetch-fix`. Potwierdzono optymalizację obrazu (maks. 1280 px, WebP jakość 0,78, fallback JPEG/PNG) oraz bufor IndexedDB. Usunięto wadliwy `fetch(data:image/...)`, który na urządzeniach mobilnych kończył się przed wysłaniem żądania multipart. Bufor jest konwertowany bezpośrednio do `Blob`, a upload używa `credentials: same-origin` i `cache: no-store`. Wersję PWA zwiększono do `v41`; pliki interfejsu wdrożono na FTP i porównano sumy SHA-256.
+### Tombstone lokalny usuwania zdjęcia - 2026-07-23
+
+Przed żądaniem sieciowym klient ukrywa zdjęcie i ustawia `imageStatus: pending_delete`. Przy błędzie zachowuje operację w IndexedDB, a zwykły `upsert-item` nie jest dodawany. Po potwierdzeniu serwera stan przechodzi na `deleted`. Wersję PWA zwiększono do `v42`; wykonano snapshot FTP przed wdrożeniem.
+### Test FTP → shared.json → Airtable - 2026-07-23
+
+Kontrolny upload małego obrazu przez konto testowe przeszedł zapis pliku do prywatnego katalogu FTP, ale endpoint zwrócił `status: pending_retry`, ponieważ zapis Airtable nie został potwierdzony. `shared.json` został prawidłowo przywrócony do stanu poprzedniego; plik pozostał w prywatnym magazynie do ponowienia, zgodnie z zasadą bufora. Po sprzątnięciu testowego identyfikatora nie pozostał testowy produkt ani wpis `imageId` w danych rodziny. Do pełnego testu między urządzeniami potrzebna jest działająca konfiguracja Airtable i sesja superadministratora do diagnostyki.

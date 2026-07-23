@@ -48,3 +48,6 @@ Na telefonie przycisk **Wyloguj** znajduje się w prawej części nagłówka.
 Reset administratora rodziny wykonuje wyłącznie superadministrator w panelu **Admin**. W edycji rodziny należy wybrać administratora, wpisać nowe hasło dwa razy i kliknąć **Nadaj nowe hasło**. Przycisk **Zapisz zmiany** zapisuje dane rodziny, ale nie zmienia hasła.
 
 Narzędzia administratora rodziny są widoczne tylko dla kont z rolą administratora. Zdjęcia produktów są zapisywane w prywatnym magazynie; przy problemie z połączeniem pozostają lokalnie i są ponownie wysyłane po odzyskaniu internetu.
+### Zdjęcia produktów
+
+Zdjęcie jest najpierw optymalizowane lokalnie (maksymalnie 1280 px), a następnie buforowane na urządzeniu i wysyłane do prywatnego magazynu. Po potwierdzeniu zapisu w danych rodziny i synchronizacji zdjęcie staje się dostępne dla pozostałych członków tej samej rodziny. Jeśli połączenie zostanie przerwane, nie zamykaj danych aplikacji — operacja zostanie ponowiona automatycznie.

@@ -121,10 +121,52 @@ Endpoint `families.php` udostępnia chronioną akcję `super_admin_status`. Rese
 
 Kontrola narzędzi administratora korzysta wyłącznie z `currentAccount.isAdmin`; lokalny fallback uprawnień został usunięty. Upload zdjęć jest wykonywany przed finalnym zatwierdzeniem edycji, błędy zachowują obraz w IndexedDB, a endpoint `product-image.php` obsługuje chronione usuwanie pliku. Cache PWA zwiększono do `v29`.
 
+### Ostatnie zdjęcie wygrywa - 2026-07-23
+
+Każdy upload zdjęcia otrzymuje nowy, unikalny `imageId`. Akcja `upload-link` blokuje dane rodziny podczas odczytu i atomowego zapisu produktu, zapisuje `imageUpdatedAt`, a poprzedni plik usuwa dopiero po potwierdzeniu nowego wpisu w `shared.json`. Dzięki temu przy równoczesnych uploadach obowiązuje kolejność zatwierdzenia przez serwer, a urządzenia pobierają wyłącznie aktualne zdjęcie. Nie są zapisywane dane base64.
+
+### Stabilne usuwanie i synchronizacja zdjęć - 2026-07-23
+
+Dodano atomową akcję `delete-link`, która usuwa `imageId` ze wspólnego produktu i plik dopiero po zatwierdzeniu zapisu. Operacje bez `imageUpdatedAt` nie mogą wyczyścić nowszego zdjęcia, a starsza synchronizacja nie nadpisuje aktualnego obrazu. Klient przechowuje usunięcia offline i ponawia je po powrocie internetu. Cache PWA zwiększono do `v37`.
+
+### Potwierdzenie zdjęcia w Airtable - 2026-07-23
+
+Upload i usuwanie zdjęć korzystają z tej samej blokady `.shared-sync.lock` co synchronizacja produktów. Wspólny moduł `airtable-client.php` zapisuje `imageId` wyłącznie po stronie serwera. Operacja otrzymuje status `completed` dopiero po potwierdzeniu zapisu rodzinnych danych i Airtable; w przeciwnym razie pozostaje `pending_retry`. Cache PWA zwiększono do `v40`.
+
+### Bufor urządzenia i status gotowości zdjęcia - 2026-07-23
+
+Obrazy są przechowywane w IndexedDB wraz ze stabilnym `photoOperationId` i ponawiane tym samym `imageId`. Produkt pokazuje zdjęcie wyłącznie przy `imageStatus: ready`; usuwanie ustawia tombstone `pending_delete`/`deleted`, a synchronizacja do Airtable pozostaje osobną operacją.
+
 ### Ukrywanie karty narzędzi administratora - 2026-07-23
 
 Karta `settings-admin-tab` jest całkowicie ukrywana dla kont bez `currentAccount.isAdmin === true`, otrzymuje `aria-hidden="true"` i nie jest dostępna z klawiatury. Zwykły użytkownik jest zawsze kierowany do ustawień użytkownika. Wersję cache PWA zwiększono do `v30`.
 
+### Menu zdjęć i synchronizacja wspólnej listy - 2026-07-23
+
+Menu wyboru zdjęcia otrzymuje wyższy `z-index` niż podgląd produktu, dzięki czemu jego przyciski są dostępne bez zamykania poprzedniego okna. Po udanym uploadzie klient zapisuje `imageId` i natychmiast próbuje zsynchronizować wspólną listę; przy błędzie kolejka offline pozostaje aktywna. Cache PWA zwiększono do `v31`.
+
+### Weryfikacja synchronizacji zdjęć - 2026-07-23
+
+Po uploadzie klient dodatkowo odczytuje wspólną listę bez cache i potwierdza obecność właściwego `imageId`. Przy konflikcie lub braku potwierdzenia pozostawia kolejkę synchronizacji. Endpoint zdjęć zachowuje zweryfikowane JPEG/PNG także na hostingach bez GD/WebP, a cache PWA zwiększono do `v32`.
+
+### Trwałe zapisanie imageId dla rodziny - 2026-07-23
+
+Po uploadzie klient gwarantuje obecność operacji `upsert-item` z `imageId`, odświeża rewizję wspólnej listy i wykonuje maksymalnie trzy próby synchronizacji. Sukces wymaga potwierdzenia `imageId` w świeżym odczycie serwera. Cache PWA zwiększono do `v33`.
+
+### Status transferu zdjęcia w wierszu produktu - 2026-07-23
+
+Stan transferu jest przechowywany tylko w pamięci klienta. Pod nazwą produktu pojawia się pasek `100%` podczas uploadu lub pobierania, a przy numerze produktu zielona albo czerwona kropka po zakończeniu. Cache PWA zwiększono do `v34`.
+
+### Atomowy upload zdjęcia z właściwością produktu - 2026-07-23
+
+Akcja `upload-link` endpointu `product-image.php` zapisuje zweryfikowany plik oraz `imageId` właściwego produktu w rodzinnej `shared.json` w jednym żądaniu i zwraca rewizję danych. Klient wysyła pełny produkt bez base64, a drugi użytkownik tej samej rodziny korzysta z chronionego endpointu obrazu. Cache PWA zwiększono do `v35`.
+
 ### Jednorazowy wyjątek danych konta testowa/test - 2026-07-23
 
 Snapshot `archives/prechange/20260723T180345Z-set-test-password` zawiera stan poprzedni. Na FTP zmieniono wyłącznie `app-private/storage/families/testowa/user-accounts.json`; plik pozostaje listą JSON bez BOM, a hash konta `test` jest bcrypt cost 12 i przechodzi `password_verify()`. Hasło wyjątku nie jest zapisywane w dokumentacji ani repozytorium.
+### Upload obrazu — konwersja bufora
+
+`readImageFile()` zmniejsza obraz do maksymalnie 1280 px i próbuje zapisać WebP z jakością 0,78. Przed żądaniem sieciowym zoptymalizowany data URL jest zapisywany w IndexedDB. Funkcja `dataUrlToBlob()` dekoduje go przez `atob()` i `Uint8Array`; nie wolno używać `fetch(data:image/...)`, ponieważ mobilne przeglądarki mogą zwrócić `Failed to fetch` przed dotarciem do endpointu. Multipart do `api/product-image.php` wymaga `credentials: same-origin`, `cache: no-store` i stabilnych `photoOperationId` oraz `imageId`. Sukcesem jest wyłącznie odpowiedź `status: completed`; w przeciwnym razie bufor pozostaje do ponowienia.
+### Usuwanie zdjęcia i stan lokalny
+
+Obsługa usuwania zapisuje lokalny tombstone przed żądaniem: `imageId` jest zachowywane wyłącznie w kopii operacji, produkt otrzymuje `imageId: null` i `imageStatus: pending_delete`, a podgląd znika natychmiast. Dedykowane `delete-link` aktualizuje `shared.json` i Airtable; plik prywatny jest usuwany dopiero po potwierdzeniu. Przy błędzie operacja pozostaje w IndexedDB i nie jest nadpisywana zwykłym `upsert-item`.

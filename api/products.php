@@ -304,6 +304,35 @@ function normalizeOperationTimestamp($value) {
     return $timestamp === false ? 0 : $timestamp;
 }
 
+function imageUpdatedAtIsNewer($candidate, $current) {
+    $candidate = (string) $candidate;
+    $current = (string) $current;
+    if ($candidate === '') return false;
+    if ($current === '') return true;
+    $candidateTime = strtotime($candidate);
+    $currentTime = strtotime($current);
+    if ($candidateTime !== false && $currentTime !== false && $candidateTime !== $currentTime) {
+        return $candidateTime > $currentTime;
+    }
+    return strcmp($candidate, $current) > 0;
+}
+
+function preserveNewerImageState($incoming, $existing) {
+    if (!is_array($existing)) return $incoming;
+    $incomingImageTime = $incoming['imageUpdatedAt'] ?? '';
+    $existingImageTime = $existing['imageUpdatedAt'] ?? '';
+    if ($incomingImageTime === '') {
+        if (array_key_exists('imageId', $existing)) $incoming['imageId'] = $existing['imageId'];
+        if (array_key_exists('imageUpdatedAt', $existing)) $incoming['imageUpdatedAt'] = $existing['imageUpdatedAt'];
+        return $incoming;
+    }
+    if ($existingImageTime !== '' && !imageUpdatedAtIsNewer($incomingImageTime, $existingImageTime)) {
+        if (array_key_exists('imageId', $existing)) $incoming['imageId'] = $existing['imageId'];
+        $incoming['imageUpdatedAt'] = $existingImageTime;
+    }
+    return $incoming;
+}
+
 function applySharedOperations($payload, $operations) {
     $payload = is_array($payload) ? $payload : [];
     $payload['items'] = is_array($payload['items'] ?? null) ? array_values($payload['items']) : [];
@@ -333,6 +362,7 @@ function applySharedOperations($payload, $operations) {
                 $existingAt = normalizeOperationTimestamp($itemsById[$itemId]['_offlineUpdatedAt'] ?? '');
                 $deletedAt = normalizeOperationTimestamp($tombstones[$itemId] ?? '');
                 if ($updatedAt >= $existingAt && $updatedAt > $deletedAt) {
+                    $item = preserveNewerImageState($item, $itemsById[$itemId] ?? null);
                     $item['_offlineUpdatedAt'] = (string) $operation['updatedAt'];
                     $itemsById[$itemId] = $item;
                     unset($tombstones[$itemId]);
