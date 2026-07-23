@@ -1137,6 +1137,11 @@ function setFamilyEditPasswordStatus(message, isError = false) {
   familyEditPasswordStatus.classList.toggle("error", isError);
 }
 
+function setFamilyAdminPasswordOutcome(message, isError = false) {
+  setFamilyEditPasswordStatus(message, isError);
+  setSuperAdminStatus(message, isError);
+}
+
 function togglePasswordField(input, button) {
   if (!input || !button) return;
   const visible = input.type === "text";
@@ -1169,6 +1174,7 @@ function closeFamilyEditModal() {
   editingFamilySlug = "";
   if (familyEditAdminTargetSelect) {
     familyEditAdminTargetSelect.innerHTML = "<option value=\"\">Wybierz administratora</option>";
+    familyEditAdminTargetSelect.disabled = true;
   }
   if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = true;
   if (familyEditAdminPasswordInput) familyEditAdminPasswordInput.type = "password";
@@ -1181,7 +1187,10 @@ function closeFamilyEditModal() {
 
 async function loadFamilyAdminTargets(familySlug, preferredUsername = "") {
   if (!familyEditAdminTargetSelect) return;
+  familyEditAdminTargetSelect.disabled = true;
+  if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = true;
   familyEditAdminTargetSelect.innerHTML = "<option value=\"\">Wczytywanie administratorów…</option>";
+  setFamilyAdminPasswordOutcome("Wczytywanie administratorów rodziny…");
   try {
     const response = await fetch(FAMILIES_STORAGE_URL, {
       method: "POST",
@@ -1191,7 +1200,12 @@ async function loadFamilyAdminTargets(familySlug, preferredUsername = "") {
       body: JSON.stringify({ action: "get_family_admins", familySlug }),
     });
     const payload = await response.json();
-    if (!response.ok || !payload.success) throw new Error(payload.error || `HTTP ${response.status}`);
+    if (!response.ok || !payload.success) {
+      const error = new Error(payload.error || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.code = payload.errorCode || "get_family_admins_failed";
+      throw error;
+    }
     const admins = Array.isArray(payload.admins) ? payload.admins : [];
     familyEditAdminTargetSelect.innerHTML = "";
     admins.forEach((admin) => {
@@ -1203,11 +1217,23 @@ async function loadFamilyAdminTargets(familySlug, preferredUsername = "") {
     if (preferredUsername && admins.some((admin) => admin.username === preferredUsername)) {
       familyEditAdminTargetSelect.value = preferredUsername;
     }
+    familyEditAdminTargetSelect.disabled = admins.length === 0;
     if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = admins.length === 0;
+    if (admins.length === 0) {
+      setFamilyAdminPasswordOutcome("Nie znaleziono administratorów tej rodziny.", true);
+    } else {
+      setFamilyAdminPasswordOutcome(`Wczytano administratora: ${familyEditAdminTargetSelect.value || admins[0].username}.`);
+    }
   } catch (error) {
     familyEditAdminTargetSelect.innerHTML = "<option value=\"\">Nie udało się wczytać administratorów</option>";
+    familyEditAdminTargetSelect.disabled = true;
     if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = true;
-    setSuperAdminStatus(`Błąd wczytywania administratorów: ${error.message}`, true);
+    const status = Number(error?.status || 0);
+    const message = status === 401 || status === 403
+      ? "Sesja superadmina wygasła lub nie ma uprawnień. Zaloguj się ponownie."
+      : (error?.message || "Nie udało się wczytać administratorów.");
+    const code = error?.code ? ` [${error.code}]` : "";
+    setFamilyAdminPasswordOutcome(`Nie można wczytać administratorów: ${message}${code} (HTTP ${status || "?"}).`, true);
   }
 }
 
@@ -2153,32 +2179,59 @@ async function logoutSuperAdmin() {
 
 async function setFamilyAdminPassword() {
   if (!superAdminAuthorized || !editingFamilySlug) {
-    setFamilyEditPasswordStatus("Sesja superadmina wygasła. Zaloguj się ponownie.", true);
-    setSuperAdminStatus("Sesja superadmina wygasła. Zaloguj się ponownie.", true);
+    setFamilyAdminPasswordOutcome("Sesja superadmina wygasła. Zaloguj się ponownie.", true);
     return;
   }
+  setFamilyAdminPasswordOutcome("Rozpoczęto reset hasła administratora…");
   const username = familyEditAdminTargetSelect?.value || "";
   const password = (familyEditAdminPasswordInput?.value || "").trim();
   const confirmation = (familyEditAdminPasswordConfirmInput?.value || "").trim();
-  if (!username) { setFamilyEditPasswordStatus("Wybierz administratora rodziny.", true); return; }
-  if (!validateNewPassword(password)) { setFamilyEditPasswordStatus("Hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true); return; }
-  if (password !== confirmation) { setFamilyEditPasswordStatus("Hasła nie są identyczne.", true); return; }
+  if (!username) { setFamilyAdminPasswordOutcome("Hasło nie zostało zmienione: wybierz administratora rodziny.", true); return; }
+  if (!validateNewPassword(password)) { setFamilyAdminPasswordOutcome("Hasło nie zostało zmienione: hasło musi mieć minimum 8 znaków, cyfrę i znak specjalny.", true); return; }
+  if (password !== confirmation) { setFamilyAdminPasswordOutcome("Hasło nie zostało zmienione: hasła nie są identyczne.", true); return; }
   if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = true;
-  setFamilyEditPasswordStatus("Zapisywanie i weryfikowanie nowego hasła…");
+  setFamilyAdminPasswordOutcome("Sprawdzanie sesji i zapisywanie nowego hasła…");
   try {
-    const sessionCheck = await fetch(FAMILIES_STORAGE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify({ action: "get_family_admins", familySlug: editingFamilySlug }) });
-    const sessionPayload = await sessionCheck.json();
+    const sessionCheck = await fetch(FAMILIES_STORAGE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify({ action: "super_admin_status" }) });
+    let sessionPayload = {};
+    try { sessionPayload = await sessionCheck.json(); } catch { sessionPayload = {}; }
     if (!sessionCheck.ok || !sessionPayload.success) {
       const error = new Error(sessionPayload.error || `HTTP ${sessionCheck.status}`);
       error.status = sessionCheck.status;
+      error.code = sessionPayload.errorCode || "session_check_failed";
       throw error;
     }
-    if (!Array.isArray(sessionPayload.admins) || !sessionPayload.admins.some((admin) => admin.username === username)) throw new Error("Wybrany administrator nie jest już dostępny w tej rodzinie.");
+    if (sessionPayload.authenticated !== true || sessionPayload.role !== "super_admin") {
+      const error = new Error("Sesja nie ma uprawnień administratora globalnego.");
+      error.status = 403;
+      error.code = "super_admin_session_required";
+      throw error;
+    }
+    setFamilyAdminPasswordOutcome("Sesja superadmina potwierdzona. Sprawdzanie administratora…");
+    const adminCheck = await fetch(FAMILIES_STORAGE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify({ action: "get_family_admins", familySlug: editingFamilySlug }) });
+    let adminPayload = {};
+    try { adminPayload = await adminCheck.json(); } catch { adminPayload = {}; }
+    if (!adminCheck.ok || !adminPayload.success) {
+      const error = new Error(adminPayload.error || `HTTP ${adminCheck.status}`);
+      error.status = adminCheck.status;
+      error.code = adminPayload.errorCode || "admin_check_failed";
+      throw error;
+    }
+    if (!Array.isArray(adminPayload.admins) || !adminPayload.admins.some((admin) => normalizeAccountUsername(admin.username || "") === normalizeAccountUsername(username))) {
+      const error = new Error("Wybrany administrator nie jest już dostępny w tej rodzinie.");
+      error.code = "admin_not_found";
+      throw error;
+    }
+    setFamilyAdminPasswordOutcome("Administrator potwierdzony. Zapisywanie i weryfikacja hasła…");
     const response = await fetch(FAMILIES_STORAGE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify({ action: "set_family_admin_password", familySlug: editingFamilySlug, username, password }) });
-    const payload = await response.json();
+    let payload = {};
+    try { payload = await response.json(); } catch { payload = {}; }
     if (!response.ok || !payload.success) {
       const error = new Error(payload.error || `HTTP ${response.status}`);
       error.status = response.status;
+      error.code = payload.errorCode || "reset_failed";
+      error.stage = payload.stage || "unknown";
+      error.requestId = payload.requestId || "";
       throw error;
     }
     if (payload.passwordVerified !== true || payload.accountRateLimitCleared !== true) {
@@ -2188,8 +2241,7 @@ async function setFamilyAdminPassword() {
     if (familyEditAdminPasswordConfirmInput) familyEditAdminPasswordConfirmInput.value = "";
     const target = `${editingFamilySlug}/${payload.username || username}`;
     const successMessage = `Hasło administratora ${target} zostało zmienione i zweryfikowane. Można się teraz zalogować nowym hasłem.`;
-    setFamilyEditPasswordStatus(successMessage);
-    setSuperAdminStatus(successMessage);
+    setFamilyAdminPasswordOutcome(successMessage);
   } catch (error) {
     const status = Number(error?.status || 0);
     const message = status === 429
@@ -2197,8 +2249,10 @@ async function setFamilyAdminPassword() {
       : (status === 401 || status === 403)
         ? "Sesja superadmina wygasła lub nie ma uprawnień. Zaloguj się ponownie."
         : (error?.message || "Nie udało się zmienić hasła.");
-    setFamilyEditPasswordStatus(`Hasło nie zostało zmienione: ${message}`, true);
-    setSuperAdminStatus(`Błąd zmiany hasła: ${message}`, true);
+    const code = error?.code ? ` [${error.code}]` : "";
+    const requestId = error?.requestId ? ` Identyfikator: ${error.requestId}.` : "";
+    const stage = error?.stage ? ` Etap: ${error.stage}.` : "";
+    setFamilyAdminPasswordOutcome(`Hasło nie zostało zmienione: ${message}${code} (HTTP ${status || "?"}).${stage}${requestId}`, true);
   } finally {
     if (familyEditPasswordSaveButton) familyEditPasswordSaveButton.disabled = false;
   }
@@ -4286,7 +4340,22 @@ superAdminAirtableSaveButton?.addEventListener("click", () => void saveSuperAdmi
 superAdminAirtableTestButton?.addEventListener("click", () => void testSuperAdminAirtable());
 superAdminSyncSaveButton?.addEventListener("click", () => void saveSuperAdminSyncSettings());
 superAdminSyncNowButton?.addEventListener("click", () => void runSuperAdminSync());
-familyEditPasswordSaveButton?.addEventListener("click", () => void setFamilyAdminPassword());
+familyEditPasswordSaveButton?.addEventListener("click", (event) => {
+  event.preventDefault();
+  void setFamilyAdminPassword();
+});
+familyEditAdminPasswordInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void setFamilyAdminPassword();
+  }
+});
+familyEditAdminPasswordConfirmInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void setFamilyAdminPassword();
+  }
+});
 familyEditAdminPasswordToggle?.addEventListener("click", () => togglePasswordField(familyEditAdminPasswordInput, familyEditAdminPasswordToggle));
 familyEditAdminPasswordConfirmToggle?.addEventListener("click", () => togglePasswordField(familyEditAdminPasswordConfirmInput, familyEditAdminPasswordConfirmToggle));
 changeOwnPasswordButton?.addEventListener("click", () => void changeOwnPassword());
@@ -4331,7 +4400,7 @@ window.addEventListener("online", () => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch((error) => {
+    navigator.serviceWorker.register("sw.js?v=27").catch((error) => {
       console.warn("Nie udało się zarejestrować trybu offline:", error);
     });
   });

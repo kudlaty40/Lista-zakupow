@@ -42,3 +42,7 @@ Na telefonie przycisk **Wyloguj** znajduje się w prawej części nagłówka.
 2. Sprawdź, czy jesteś zalogowany i masz połączenie z internetem.
 3. Nie czyść danych aplikacji przed zakończeniem synchronizacji.
 4. Jeśli problem dotyczy wszystkich urządzeń, zgłoś go administratorowi globalnemu.
+
+## Reset hasła administratora rodziny
+
+Reset administratora rodziny wykonuje wyłącznie superadministrator w panelu **Admin**. W edycji rodziny należy wybrać administratora, wpisać nowe hasło dwa razy i kliknąć **Nadaj nowe hasło**. Przycisk **Zapisz zmiany** zapisuje dane rodziny, ale nie zmienia hasła.

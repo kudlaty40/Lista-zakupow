@@ -95,3 +95,25 @@ Dodano przełącznik ciemnego wyglądu zapisywany w ustawieniach konkretnego kon
 ### Kontrast zakładek w ciemnym motywie - 2026-07-23
 
 Utworzono snapshot `archives/prechange/20260723T164231Z-dark-tabs-contrast`. Dodano ciemne tła i jasne teksty dla zakładek głównych, kart ustawień i zakładek narzędzi administratora oraz stany hover/focus. Ujednolicono także kontrast przycisków kolejności, kategorii, strzałek produktów i akcji produktów. Cache PWA zwiększono do `v24`; dane i API bez zmian.
+### Niezawodny reset hasła administratora rodziny - 2026-07-23
+
+Utworzono snapshot FTP `archives/prechange/20260723T170341Z-family-admin-password-reliability`. Ujednolicono backup z prywatną konfiguracją `app-private/config.php`, dodano kody diagnostyczne błędów resetu, widoczny status w modalu i panelu superadmina oraz blokadę przycisku podczas wczytywania administratorów. Cache PWA zwiększono do `v25`. Limity logowania i blokada IP pozostały bez zmian.
+Weryfikacja techniczna FTP/HTTPS przeszła poprawnie; test zapisu i logowania po resecie wymaga aktywnej sesji superadmina i nie jest wykonywany automatycznie.
+### Logowanie Testowa i PWA - 2026-07-23
+
+Audyt potwierdził poprawny bcrypt konta `test`, normalizację rodziny `testowa` oraz brak blokady konta. Ujednolicono odczyt listy kont i normalizację zapisanych loginów, dodano `Retry-After` dla aktywnej blokady oraz przygotowano ponowne wdrożenie ikony PWA. Cache PWA zwiększono do `v26`; docelowy reset hasła ma używać silnego hasła zgodnego z polityką.
+### Testowa/test - wdrożenie diagnostyki i poprawka ikony PWA - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T171542Z-login-testowa-pwa`. Wdrożono normalizację loginów zapisanych w plikach kont, rygorystyczną walidację listy JSON, nagłówek `Retry-After` dla blokady oraz cache PWA `v26`. Z powodu konfliktu ścieżki Apache `/icons/` ikonę przeniesiono do `app-icons/app-icon.svg`; HTTPS zwraca `200`. Zapis nowego silnego hasła wymaga aktywnej sesji superadmina i ręcznego testu w panelu.
+
+### Diagnostyka resetu administratora rodziny - 2026-07-23
+
+Utworzono snapshot FTP przed zmianą. Dodano kontrolę sesji superadmina, etapowanie resetu hasła, techniczny identyfikator żądania oraz kody błędów widoczne w statusie modala i panelu. Nie ujawniają one haseł, hashy ani ścieżek prywatnych. Cache PWA zwiększono do `v27`; limit IP nie został wyłączony.
+
+### Jednorazowy wyjątek hasła testowa/test - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T180345Z-set-test-password`. Zmieniono wyłącznie hash konta administratora `test` w rodzinie `testowa`, zapisując bcrypt cost 12. Weryfikacja FTP potwierdziła poprawną listę JSON, rolę administratora i zgodność hasha z hasłem testowym. Wyjątek nie zmienia polityki haseł, limitów logowania ani innych kont.
+
+### Wymuszenie aktualnego JavaScriptu resetu - 2026-07-23
+
+Utworzono snapshot `archives/prechange/20260723T174013Z-reset-cache-v28`. Wersję `script.js` w HTML zmieniono na `v28`, service worker zwiększono do `v28`, a przycisk resetu otrzymał natychmiastowy komunikat rozpoczęcia oraz obsługę klawisza Enter. Dane kont, limity IP i hasło superadmina nie zostały zmienione.

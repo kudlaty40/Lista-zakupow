@@ -16,6 +16,16 @@ function jsonError($status, $message) {
     exit;
 }
 
+function jsonErrorCode($status, $code, $message) {
+    http_response_code($status);
+    echo json_encode([
+        'success' => false,
+        'error' => $message,
+        'errorCode' => $code,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 function normalizeFamilySlug($value) {
     $clean = strtolower(trim((string) $value));
     $clean = preg_replace('/[^a-z0-9._-]+/', '-', $clean);
@@ -278,6 +288,15 @@ if ($action === 'super_admin_logout') {
 
 appRequireSuperAdmin();
 
+if ($action === 'super_admin_status') {
+    echo json_encode([
+        'success' => true,
+        'authenticated' => true,
+        'role' => 'super_admin',
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if ($action === 'get_family_admins') {
     $familySlug = normalizeFamilySlug($payload['familySlug'] ?? '');
     if ($familySlug === '') {
@@ -317,11 +336,26 @@ if ($action === 'get_family_admins') {
 }
 
 if ($action === 'set_family_admin_password') {
+    $requestId = bin2hex(random_bytes(8));
+    $resetError = static function ($status, $code, $stage, $message) use ($requestId) {
+        http_response_code($status);
+        echo json_encode([
+            'success' => false,
+            'error' => $message,
+            'errorCode' => $code,
+            'stage' => $stage,
+            'requestId' => $requestId,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    };
     $familySlug = normalizeFamilySlug($payload['familySlug'] ?? '');
     $username = normalizeUsername($payload['username'] ?? '');
     $newPassword = trim((string) ($payload['password'] ?? ''));
-    if ($familySlug === '' || $username === '' || !validAccountPassword($newPassword)) {
-        jsonError(400, 'Wybierz rodzinę, administratora i podaj hasło o długości co najmniej 8 znaków, z cyfrą i znakiem specjalnym.');
+    if ($familySlug === '' || $username === '') {
+        $resetError(400, 'missing_target', 'target', 'Wybierz rodzinę i administratora.');
+    }
+    if (!validAccountPassword($newPassword)) {
+        $resetError(400, 'invalid_password', 'validation', 'Hasło musi mieć co najmniej 8 znaków, cyfrę i znak specjalny.');
     }
     $familyExists = false;
     foreach ($index['families'] as $family) {
@@ -331,38 +365,42 @@ if ($action === 'set_family_admin_password') {
         }
     }
     if (!$familyExists) {
-        jsonError(404, 'Nie znaleziono wybranej rodziny.');
+        $resetError(404, 'family_not_found', 'family', 'Nie znaleziono wybranej rodziny.');
     }
 
     $familyDir = $storageDir . '/families/' . $familySlug;
     if (!is_dir($familyDir)) {
-        jsonError(404, 'Brak katalogu danych wybranej rodziny.');
+        $resetError(404, 'family_storage_missing', 'storage', 'Brak katalogu danych wybranej rodziny.');
     }
     $accountsFile = $familyDir . '/user-accounts.json';
-    $accounts = readJsonFile($accountsFile, []);
-    if (!is_array($accounts) || !array_is_list($accounts) || !$accounts) jsonError(500, 'Plik kont rodziny ma nieprawidłowy format.');
+    $rawAccounts = @file_get_contents($accountsFile);
+    $accounts = is_string($rawAccounts) ? json_decode($rawAccounts, true) : null;
+    if (!is_array($accounts) || !array_is_list($accounts) || !$accounts || json_last_error() !== JSON_ERROR_NONE) {
+        $resetError(500, 'invalid_accounts_file', 'accounts', 'Plik kont rodziny ma nieprawidłowy format.');
+    }
     $position = -1;
     foreach ($accounts as $i => $account) {
-        if (($account['username'] ?? '') === $username && ($account['isAdmin'] ?? false) === true) {
+        if (normalizeUsername($account['username'] ?? '') === $username && ($account['isAdmin'] ?? false) === true) {
             $position = $i;
             break;
         }
     }
-    if ($position < 0) jsonError(404, 'Nie znaleziono administratora o podanym loginie w tej rodzinie.');
+    if ($position < 0) $resetError(404, 'admin_not_found', 'target', 'Nie znaleziono administratora o podanym loginie w tej rodzinie.');
     appBackupBeforeMutation('family-admin-password');
     $accounts[$position]['password'] = appPasswordHash($newPassword);
     $encodedAccounts = json_encode(array_values($accounts), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($encodedAccounts) || !appAtomicWrite($accountsFile, $encodedAccounts)) {
-        jsonError(500, 'Nie udało się zapisać nowego hasła.');
+        $resetError(500, 'write_failed', 'write', 'Nie udało się zapisać nowego hasła.');
     }
     $verifiedAccounts = readJsonFile($accountsFile, []);
     if (!is_array($verifiedAccounts) || !array_is_list($verifiedAccounts)) {
-        jsonError(500, 'Nie udało się potwierdzić formatu pliku kont po zapisie.');
+        $resetError(500, 'verify_format_failed', 'verify', 'Nie udało się potwierdzić formatu pliku kont po zapisie.');
     }
+    $verifiedUsername = normalizeUsername($verifiedAccounts[$position]['username'] ?? '');
     $verifiedHash = $verifiedAccounts[$position]['password'] ?? '';
     $verifiedAlgorithm = is_string($verifiedHash) ? password_get_info($verifiedHash)['algoName'] : '';
-    if (!is_string($verifiedHash) || !password_verify($newPassword, $verifiedHash) || $verifiedAlgorithm !== 'bcrypt') {
-        jsonError(500, 'Nie udało się potwierdzić zapisu nowego hasła.');
+    if ($verifiedUsername !== $username || !is_string($verifiedHash) || !password_verify($newPassword, $verifiedHash) || $verifiedAlgorithm !== 'bcrypt') {
+        $resetError(500, 'verify_hash_failed', 'verify', 'Nie udało się potwierdzić zapisu nowego hasła.');
     }
     appClearRateLimit('account-login', $familySlug . ':' . $username);
     echo json_encode([
@@ -371,6 +409,8 @@ if ($action === 'set_family_admin_password') {
         'username' => $accounts[$position]['username'] ?? '',
         'passwordVerified' => true,
         'accountRateLimitCleared' => true,
+        'stage' => 'verified',
+        'requestId' => $requestId,
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }

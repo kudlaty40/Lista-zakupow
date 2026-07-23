@@ -1,11 +1,11 @@
-const CACHE_NAME = "shopping-list-shell-v24";
+const CACHE_NAME = "shopping-list-shell-v28";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
-  "./script.js",
+  "./script.js?v=28",
   "./manifest.webmanifest",
-  "./icons/app-icon.svg",
+  "./app-icons/app-icon.svg",
 ];
 
 self.addEventListener("install", (event) => {

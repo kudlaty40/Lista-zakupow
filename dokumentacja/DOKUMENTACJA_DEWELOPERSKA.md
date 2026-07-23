@@ -99,3 +99,24 @@ CSS dla `data-theme="dark"` nadpisuje kolory powierzchni, tekstów, obramowań, 
 ### Zakładki i kontrolki dark mode
 
 Reguły `html[data-theme="dark"]` obejmują `.tab-button`, `.admin-tab-button`, `.settings-section-tab`, `.category-toggle`, `.all-product-expand-button` oraz przyciski akcji produktów. Nieaktywne zakładki używają kontrastowego granatowego tła, aktywne pozostają fioletowe, a focus jest wyróżniony obramowaniem. Service worker ma wersję `v24`.
+### Reset hasła administratora rodziny - diagnostyka
+
+`set_family_admin_password` zwraca techniczny `errorCode` bez sekretów, sprawdza listę kont JSON, normalizuje login i po zapisie weryfikuje bcrypt cost 12 oraz `password_verify()`. Frontend pokazuje etap wczytywania, błąd lub sukces jednocześnie w modalu i stałym statusie panelu. Backup korzysta z `backup_dir` w prywatnym `app-private/config.php`, z zachowaniem awaryjnego fallbacku dla starszej konfiguracji. Service worker ma wersję `v25`, a rejestracja używa parametru cache-busting.
+Weryfikacja techniczna FTP/HTTPS przeszła poprawnie; test zapisu i logowania po resecie wymaga aktywnej sesji superadmina i nie jest wykonywany automatycznie.
+### Logowanie rodzin i diagnostyka rate-limit
+
+`user-accounts.php` waliduje teraz, że plik kont jest listą JSON i normalizuje login zarówno z żądania, jak i z rekordu. Odpowiedź `429` zawiera bezpieczny `Retry-After`; szczegóły konta nie są ujawniane. Service worker został zwiększony do `v26`, a ikona manifestu jest sprawdzana przez HTTPS.
+### Diagnostyka logowania Testowa
+
+Konto `test` jest wyszukiwane po znormalizowanym loginie także po stronie rekordu JSON. Niepoprawny format pliku kont zatrzymuje operację komunikatem ogólnym, a aktywna blokada logowania zwraca `Retry-After`. Ikona PWA używa ścieżki `app-icons/app-icon.svg`, ponieważ `/icons/` jest aliasem Apache.
+
+### Diagnostyka resetu administratora rodziny - 2026-07-23
+
+Endpoint `families.php` udostępnia chronioną akcję `super_admin_status`. Reset hasła zwraca techniczny `requestId`, etap operacji (`target`, `validation`, `family`, `storage`, `accounts`, `write`, `verify`) oraz kod błędu bez ujawniania sekretów. Frontend wykonuje kontrolę sesji, pobiera administratorów i pokazuje status resetu w modalu oraz panelu. Service worker ma wersję `v27`.
+### Wersjonowanie klienta resetu - 2026-07-23
+
+`index.html` ładuje `script.js?v=28`, a service worker używa cache `v28` i przechowuje ten sam URL z wersją. Obsługa resetu pokazuje status przed walidacją i ma awaryjne uruchomienie klawiszem Enter.
+
+### Jednorazowy wyjątek danych konta testowa/test - 2026-07-23
+
+Snapshot `archives/prechange/20260723T180345Z-set-test-password` zawiera stan poprzedni. Na FTP zmieniono wyłącznie `app-private/storage/families/testowa/user-accounts.json`; plik pozostaje listą JSON bez BOM, a hash konta `test` jest bcrypt cost 12 i przechodzi `password_verify()`. Hasło wyjątku nie jest zapisywane w dokumentacji ani repozytorium.

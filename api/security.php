@@ -172,7 +172,11 @@ function appRateLimitRead($path) {
 
 function appRequireLoginRateLimit($scope, $identifier, $message = 'Zbyt wiele prób logowania. Spróbuj ponownie za kilka minut.') {
     $data = appRateLimitRead(appRateLimitFile($scope, $identifier));
-    if ((int) ($data['blocked_until'] ?? 0) > time()) {
+    $blockedUntil = (int) ($data['blocked_until'] ?? 0);
+    if ($blockedUntil > time()) {
+        if (!headers_sent()) {
+            header('Retry-After: ' . max(1, $blockedUntil - time()));
+        }
         appJsonError(429, $message);
     }
 }

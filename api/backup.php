@@ -2,7 +2,10 @@
 /* Private filesystem backups. This file contains no credentials. */
 
 function appBackupDirectory() {
-    $directory = rtrim((string) (getenv('APP_BACKUP_DIR') ?: ''), '/\\');
+    // The hosting does not provide process environment variables reliably.
+    // Keep the backup location in the private configuration outside webroot.
+    $config = function_exists('appPrivateConfig') ? appPrivateConfig() : [];
+    $directory = rtrim((string) ($config['backup_dir'] ?? getenv('APP_BACKUP_DIR') ?? ''), '/\\');
     if ($directory === '' || !is_dir($directory) || !is_writable($directory)) {
         appJsonError(500, 'Prywatny katalog kopii bezpieczeństwa jest niedostępny. Zapis został wstrzymany.');
     }
