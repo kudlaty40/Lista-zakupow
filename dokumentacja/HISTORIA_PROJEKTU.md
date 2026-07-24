@@ -6,7 +6,7 @@ Ten plik jest lokalnym rejestrem projektu. Nie zawiera haseł, tokenów, danych 
 
 - Dokumentacja i snapshoty robocze pozostają lokalne.
 - FTP jest środowiskiem wdrożeniowym, a GitHub zawiera wyłącznie oczyszczony kod przeznaczony do publikacji.
-- Przed zmianą na FTP należy wykonać prywatny snapshot i po wdrożeniu zweryfikować stan.
+- Przy kolejnych zmianach FTP nie wykonuje się nowych snapshotów; po wdrożeniu weryfikuje się stan i sumy SHA-256.
 - Żaden sekret nie może trafić do Git, GitHub, logów ani dokumentacji.
 
 ## Chronologia
@@ -17,6 +17,17 @@ Rozszerzono proxy nutrition o cukry, sol, blonnik, nasycone kwasy tluszczowe,
 zdjecie opakowania HTTPS, Nutri-Score i NOVA dla Open Food Facts oraz fallbacku
 Open Food Repo. Wlasne zdjecie pozostaje wazniejsze od publicznego obrazu, a
 oznaczenia sa nakladane tylko na publicznym fallbacku.
+
+### Naprawa synchronizacji zdjec produktow - 2026-07-24
+
+Analiza wykazala, ze nieudany zapis Airtable cofal lokalny `shared.json`, przez
+co upload pozostawal tylko na urzadzeniu nadawcy, a usuniete zdjecia wracaly po
+odswiezeniu. Zmieniono backend tak, aby lokalny zapis byl rozstrzygajacy, a
+Airtable pozostalo replika z informacja `airtable_pending`. Frontend czysci
+bufory lokalne po potwierdzeniu API oraz usuwa `imageUpdatedAt`.
+
+Walidacja lokalna PHP i JavaScript przeszla poprawnie. Odczyt zdalnego stanu
+rodziny `testowa` dziala; zdalny test dwoch sesji wymaga osobnego wdrozenia FTP.
 
 ### Tryb serwisowy i wdrozenie v43 - 2026-07-24
 
@@ -186,3 +197,20 @@ Przed żądaniem sieciowym klient ukrywa zdjęcie i ustawia `imageStatus: pendin
 ### Test FTP → shared.json → Airtable - 2026-07-23
 
 Kontrolny upload małego obrazu przez konto testowe przeszedł zapis pliku do prywatnego katalogu FTP, ale endpoint zwrócił `status: pending_retry`, ponieważ zapis Airtable nie został potwierdzony. `shared.json` został prawidłowo przywrócony do stanu poprzedniego; plik pozostał w prywatnym magazynie do ponowienia, zgodnie z zasadą bufora. Po sprzątnięciu testowego identyfikatora nie pozostał testowy produkt ani wpis `imageId` w danych rodziny. Do pełnego testu między urządzeniami potrzebna jest działająca konfiguracja Airtable i sesja superadministratora do diagnostyki.
+
+### Całkowite usunięcie obsługi zdjęć produktów - 2026-07-24
+
+Usunięto z aplikacji dodawanie, pobieranie, wyświetlanie i usuwanie zdjęć produktów, zdjęcia opakowań z nutrition, nakładki Nutri-Score/NOVA na obrazach, kolejki zdjęciowe IndexedDB oraz endpoint `api/product-image.php` i nieużywany moduł `api/airtable-client.php`. `api/nutrition.php` nie zwraca już pola `imageUrl`, a `api/products.php` usuwa stare metadane zdjęciowe z payloadów.
+
+W ramach czyszczenia usunięto pliki z katalogów `data/images` oraz pola `image`, `imageId`, `imageStatus`, `imageUpdatedAt` i `photoOperationId` z danych rodzin. Cache PWA zwiększono do `v44`. Walidacja obejmuje lint PHP, sprawdzenie JavaScript/CSS, test listy produktów bez zdjęć i kontrolę braku endpointu zdjęciowego. Wdrożenie nie obejmuje commita ani pushu.
+
+`api/admin-sync.php` filtruje te pola oraz `nutrition.imageUrl` przed kolejną synchronizacją Airtable. Bez aktywnej sesji superadministratora nie wykonano ręcznego zapisu do Airtable; lokalne dane FTP są oczyszczone i stan ten zostanie zastosowany przy najbliższym uruchomieniu synchronizacji administracyjnej.
+
+### Commit i push - 2026-07-24
+
+Planowany commit: `Usuń obsługę zdjęć produktów i wyczyść dane`. Zakres obejmuje
+usunięcie funkcji zdjęciowych, czyszczenie danych FTP, cache PWA `v44`,
+aktualizację dokumentacji i sanitizację synchronizacji Airtable. Walidacja:
+lint PHP, zgodność SHA-256 FTP, HTTPS 200, `maintenance:false`, stary endpoint
+404 oraz `git diff --check`. Commit i push do `origin/main` są wykonywane na
+wyraźne polecenie użytkownika w tej rozmowie.

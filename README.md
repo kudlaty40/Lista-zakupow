@@ -1,72 +1,36 @@
 # Lista zakupów
 
-Prywatna aplikacja PWA do wspólnych list zakupów dla kilku rodzin. Działa na komputerze i telefonie, również podczas chwilowego braku internetu.
+Prywatna aplikacja PWA do wspólnych list zakupów dla kilku rodzin, działająca
+także z chwilowym brakiem internetu.
 
-## Najważniejsze funkcje
+## Funkcje
 
-- wspólna lista zakupów, historia produktów i oznaczanie zakupów;
-- konta użytkowników oraz role administratora rodziny i superadministratora;
-- produkty pogrupowane według kategorii z możliwością zwijania kategorii;
-- ustawienia widoku zapisywane osobno dla każdego konta;
-- tryb offline PWA z kolejką zmian i późniejszą synchronizacją;
-- zdjęcia produktów przechowywane przez chroniony endpoint;
-- dziennik diety, makroskładniki i opcjonalne dane żywieniowe;
-- opcjonalna synchronizacja z Airtable;
-- panel superadministratora z zarządzaniem rodzinami, Airtable, synchronizacją i bezpieczeństwem.
+- wspólne listy zakupów, historia produktów i kategorie;
+- konta użytkowników oraz role administratora;
+- tryb offline PWA z kolejką zwykłych zmian;
+- dziennik diety i wartości odżywcze, w tym cukry, sól, błonnik i tłuszcze nasycone;
+- opcjonalna synchronizacja Airtable i panel superadministratora.
 
-## Wymagania
-
-- PHP 8.0+ z rozszerzeniami JSON, cURL i GD;
-- Apache 2.4 z `mod_rewrite`, `mod_headers` i obsługą `.htaccess`;
-- zapisywalne katalogi danych i kopii zapasowych poza webrootem;
-- HTTPS w środowisku produkcyjnym.
+Aplikacja nie obsługuje zdjęć produktów ani zdjęć opakowań.
 
 ## Uruchomienie lokalne
 
-1. Skopiuj pliki aplikacji do prywatnego katalogu roboczego.
-2. Przygotuj zapisywalne katalogi danych i backupów poza katalogiem publicznym.
-3. Skonfiguruj administratora globalnego przez bezpieczny hash hasła:
+Wymagany jest PHP 8.0+ z JSON i cURL oraz Apache lub serwer developerski PHP.
+Sekrety i dane aplikacji przechowuj poza repozytorium i webrootem.
 
-   ```powershell
-   php -r "echo password_hash('SILNE_HASLO', PASSWORD_ARGON2ID), PHP_EOL;"
-   ```
+```powershell
+php -S localhost:8000
+```
 
-4. Ustaw konfigurację w środowisku procesu PHP lub w prywatnej konfiguracji hostingu. Nie przechowuj sekretów w repozytorium.
-5. Uruchom lokalny serwer:
+## Wdrożenie
 
-   ```powershell
-   php -S localhost:8000
-   ```
-
-6. Otwórz `http://localhost:8000`, wybierz **Admin**, zaloguj się i utwórz pierwszą rodzinę.
-
-## Panel administratora
-
-Superadministrator może zarządzać rodzinami, nadawać hasła administratorom rodzin, konfigurować Airtable, sprawdzać połączenie, ustawiać globalną synchronizację oraz zmieniać własne hasło. Panel jest podzielony na karty i wymaga osobnej sesji superadministratora.
-
-Administrator rodziny zarządza kontami swojej rodziny i produktami. Jego ustawienia nie dają dostępu do globalnej konfiguracji Airtable ani do ustawień innych rodzin.
-
-## Airtable
-
-Integracja jest opcjonalna. Token powinien mieć minimalne uprawnienia tylko do wybranej bazy i tabeli: `data.records:read` oraz `data.records:write`. Token jest przechowywany wyłącznie po stronie serwera i nigdy nie jest zwracany do przeglądarki. Szczegóły struktury tabeli znajdują się w [api/airtable-table-setup.md](api/airtable-table-setup.md).
-
-## Wdrożenie produkcyjne
-
-1. Umieść pliki aplikacji w `public_html`, bez katalogów runtime, backupów i konfiguracji lokalnej.
-2. Skonfiguruj prywatne ścieżki danych, backupów oraz hash administratora poza webrootem.
-3. Token Airtable i identyfikatory bazy przechowuj wyłącznie w prywatnej konfiguracji serwera.
-4. Włącz HTTPS i sprawdź przekierowanie HTTP → HTTPS.
-5. Przed każdą zmianą wykonaj prywatny snapshot FTP, wdrażaj pliki seryjnie i zweryfikuj sumy kontrolne.
-6. Sprawdź logowanie, zapis produktu, zdjęcia, backup, tryb offline i synchronizację Airtable.
+Publikuj wyłącznie kod aplikacji. Podczas aktualizacji włącz tryb serwisowy,
+prześlij wskazane pliki przez FTPS, porównaj SHA-256, wykonaj test HTTPS i
+wyłącz tryb serwisowy. Zgodnie ze stałą projektu nie twórz nowych snapshotów
+FTP. Nie wysyłaj `storage/`, `archives/`, `app-private/`, konfiguracji ani
+sekretów.
 
 ## Bezpieczeństwo
 
-Nie publikuj `storage/`, `archives/`, `.vscode/sftp.json`, plików konfiguracji, haseł, tokenów Airtable, kluczy prywatnych ani danych FTP/SFTP. Dane aplikacji i backupy powinny znajdować się poza webrootem i być dostępne wyłącznie przez autoryzowane endpointy.
-
-Po każdym podejrzeniu wycieku natychmiast unieważnij token, zmień hasła, usuń sekret z kopii wdrożeniowych i przejrzyj logi dostępu. Nie wykonuj commitów zawierających dane produkcyjne.
-
-Plik `off.json` zawiera publiczny zbiór danych Open Food Facts używany opcjonalnie do wyszukiwania informacji żywieniowych. Nie zawiera danych kont aplikacji ani sekretów. Przy dalszym rozpowszechnianiu zbioru należy zachować wymagane oznaczenia i warunki licencyjne Open Food Facts (ODbL).
-
-## Licencja i przeznaczenie
-
-Projekt jest przeznaczony do prywatnego użytku własnego. Przed publicznym wdrożeniem należy samodzielnie sprawdzić konfigurację hostingu, uprawnienia plików i certyfikat TLS.
+Token Airtable pozostaje wyłącznie po stronie serwera. Dane rodzin i backupy
+muszą być poza webrootem i dostępne tylko przez autoryzowane endpointy.

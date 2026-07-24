@@ -70,6 +70,7 @@ if ($method === 'OPTIONS') {
 }
 
 function sendPayloadResponse($data, $source, $airtableEnabled, $airtableSynced, $family) {
+    $data = stripPhotoMetadata($data);
     $response = wrapResponse($data, $source, $airtableEnabled, $airtableSynced, $family);
     $revision = $response['revision'];
     $etag = '"' . $revision . '"';
@@ -299,38 +300,23 @@ function extractDiaryFromPayload($payload) {
     return [];
 }
 
+function stripPhotoMetadata($payload) {
+    if (!is_array($payload)) return $payload;
+    if (isset($payload['items']) && is_array($payload['items'])) {
+        foreach ($payload['items'] as &$item) {
+            if (!is_array($item)) continue;
+            foreach (['image', 'imageId', 'imageStatus', 'imageUpdatedAt', 'photoOperationId'] as $field) {
+                unset($item[$field]);
+            }
+        }
+        unset($item);
+    }
+    return $payload;
+}
+
 function normalizeOperationTimestamp($value) {
     $timestamp = strtotime((string) $value);
     return $timestamp === false ? 0 : $timestamp;
-}
-
-function imageUpdatedAtIsNewer($candidate, $current) {
-    $candidate = (string) $candidate;
-    $current = (string) $current;
-    if ($candidate === '') return false;
-    if ($current === '') return true;
-    $candidateTime = strtotime($candidate);
-    $currentTime = strtotime($current);
-    if ($candidateTime !== false && $currentTime !== false && $candidateTime !== $currentTime) {
-        return $candidateTime > $currentTime;
-    }
-    return strcmp($candidate, $current) > 0;
-}
-
-function preserveNewerImageState($incoming, $existing) {
-    if (!is_array($existing)) return $incoming;
-    $incomingImageTime = $incoming['imageUpdatedAt'] ?? '';
-    $existingImageTime = $existing['imageUpdatedAt'] ?? '';
-    if ($incomingImageTime === '') {
-        if (array_key_exists('imageId', $existing)) $incoming['imageId'] = $existing['imageId'];
-        if (array_key_exists('imageUpdatedAt', $existing)) $incoming['imageUpdatedAt'] = $existing['imageUpdatedAt'];
-        return $incoming;
-    }
-    if ($existingImageTime !== '' && !imageUpdatedAtIsNewer($incomingImageTime, $existingImageTime)) {
-        if (array_key_exists('imageId', $existing)) $incoming['imageId'] = $existing['imageId'];
-        $incoming['imageUpdatedAt'] = $existingImageTime;
-    }
-    return $incoming;
 }
 
 function applySharedOperations($payload, $operations) {
@@ -362,7 +348,9 @@ function applySharedOperations($payload, $operations) {
                 $existingAt = normalizeOperationTimestamp($itemsById[$itemId]['_offlineUpdatedAt'] ?? '');
                 $deletedAt = normalizeOperationTimestamp($tombstones[$itemId] ?? '');
                 if ($updatedAt >= $existingAt && $updatedAt > $deletedAt) {
-                    $item = preserveNewerImageState($item, $itemsById[$itemId] ?? null);
+                    foreach (['image', 'imageId', 'imageStatus', 'imageUpdatedAt', 'photoOperationId'] as $photoField) {
+                        unset($item[$photoField]);
+                    }
                     $item['_offlineUpdatedAt'] = (string) $operation['updatedAt'];
                     $itemsById[$itemId] = $item;
                     unset($tombstones[$itemId]);
@@ -425,12 +413,12 @@ if ($method === 'POST' && ($_GET['action'] ?? '') === 'operations') {
         // The local, atomically-written mirror is the fast source of truth for
         // application reads and offline-operation merges. Airtable is a synced
         // replica and must never put the interactive path behind a remote read.
-        $currentPayload = readJsonFile($storageFile, []);
+        $currentPayload = stripPhotoMetadata(readJsonFile($storageFile, []));
         if (!is_array($currentPayload)) {
             $currentPayload = [];
         }
         if (empty($currentPayload) && is_array($requestData['fallback'] ?? null)) {
-            $currentPayload = $requestData['fallback'];
+            $currentPayload = stripPhotoMetadata($requestData['fallback']);
         }
 
         $mergedPayload = applySharedOperations($currentPayload, $operations);
@@ -485,7 +473,7 @@ if ($method === 'POST') {
         $syncPayload = $data;
     }
 
-    $localPayload = $syncPayload;
+    $localPayload = stripPhotoMetadata($syncPayload);
     if (array_key_exists('diaryEntries', $data) || array_key_exists('data', $data)) {
         $localPayload = $data;
     }

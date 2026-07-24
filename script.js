@@ -62,7 +62,6 @@ const productQuantity = document.getElementById("product-quantity");
 const productUnit = document.getElementById("product-unit");
 const productCategory = document.getElementById("product-category");
 const productCategorySuggestions = document.getElementById("product-category-suggestions");
-const productImageButton = document.getElementById("product-image-button");
 const shopItems = document.getElementById("shop-items");
 const shopLoadingStatus = document.getElementById("shop-loading-status");
 const allItems = document.getElementById("all-items");
@@ -152,8 +151,6 @@ const superAdminSyncSummary = document.getElementById("super-admin-sync-summary"
 
 let items = [];
 let activeTab = "shop";
-let currentPreviewItem = null;
-let pendingNewItemImage = null;
 let currentUser = "";
 let currentAccount = null;
 let activeAdminTab = "airtable";
@@ -166,11 +163,10 @@ const FAMILIES_STORAGE_URL = "api/families.php";
 const NUTRITION_PROXY_URL = "api/nutrition.php";
 const MAINTENANCE_STATUS_URL = "api/maintenance-status.php";
 const AIRTABLE_HEALTH_URL = "api/airtable-health.php";
-const PRODUCT_IMAGE_URL = "api/product-image.php";
 const CLIENT_STORAGE_VERSION = "2026-07-20-storage-v2";
 const OFFLINE_QUEUE_VERSION = "v2";
 const OFFLINE_DB_NAME = "shopping-list-offline";
-const OFFLINE_DB_VERSION = 1;
+const OFFLINE_DB_VERSION = 2;
 const OFFLINE_ACCESS_DAYS = 14;
 let useServerStorage = true;
 let maintenanceMode = false;
@@ -197,7 +193,6 @@ let selectedFamily = "";
 let families = [];
 const collapsedCategorySections = new Set();
 const expandedProductActions = new Set();
-const imageTransferStates = new Map();
 let superAdminAuthorized = false;
 let editingFamilySlug = "";
 let editingAccountUsername = "";
@@ -209,19 +204,6 @@ let sharedServerRevision = "";
 let diaryServerRevision = "";
 let syncDebounceTimer = null;
 let allProductsLimit = 75;
-let legacyImageMigrationActive = false;
-
-function setImageTransferState(itemId, state, message = "") {
-  const key = String(itemId || "");
-  if (!key) return;
-  imageTransferStates.set(key, { state, message });
-  if (typeof renderItems === "function") renderItems();
-}
-
-function getImageTransferState(item) {
-  return imageTransferStates.get(String(item?.id || "")) || null;
-}
-
 function openOfflineDatabase() {
   return new Promise((resolve, reject) => {
     if (!window.indexedDB) {
@@ -233,6 +215,14 @@ function openOfflineDatabase() {
       if (!request.result.objectStoreNames.contains("records")) {
         request.result.createObjectStore("records");
       }
+      const store = request.transaction.objectStore("records");
+      store.openCursor().onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (!cursor) return;
+        const key = String(cursor.key || "");
+        if (key.startsWith("image:") || key.startsWith("image-deletes:")) cursor.delete();
+        cursor.continue();
+      };
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error("Nie można otworzyć pamięci offline."));
@@ -428,71 +418,6 @@ function getOfflineRecordKey(scope, user = "") {
 function getOfflineOperationsKey() {
   const family = getActiveFamily() || "default";
   return `operations:${OFFLINE_QUEUE_VERSION}:${family}:shared`;
-}
-
-function getOfflineImageKey(itemId) {
-  return `image:${getActiveFamily() || "default"}:${String(itemId || "")}`;
-}
-
-function makePhotoOperationId(itemId) {
-  const randomPart = globalThis.crypto?.randomUUID?.().replaceAll("-", "") || Math.random().toString(36).slice(2);
-  return `photo-${String(itemId || "item")}-${Date.now()}-${randomPart}`;
-}
-
-async function getPendingPhotoRecord(item, imageData) {
-  const key = getOfflineImageKey(item?.id);
-  const existing = await offlineDbRead(key).catch(() => null);
-  if (existing && typeof existing === "object" && existing.data === imageData && existing.imageId && existing.photoOperationId) return existing;
-  const record = {
-    data: imageData,
-    imageId: `image-${item.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    photoOperationId: makePhotoOperationId(item?.id),
-  };
-  await offlineDbWrite(key, record);
-  return record;
-}
-
-function getOfflineImageDeletesKey() {
-  return `image-deletes:${getActiveFamily() || "default"}`;
-}
-
-async function queueOfflineImageDelete(item) {
-  if (!item?.id || !item?.imageId) return;
-  const key = getOfflineImageDeletesKey();
-  const pending = await offlineDbRead(key).catch(() => []);
-  const next = Array.isArray(pending) ? pending.filter((entry) => String(entry?.productId) !== String(item.id)) : [];
-  next.push({ productId: String(item.id), imageId: String(item.imageId) });
-  await offlineDbWrite(key, next);
-}
-
-async function flushOfflineImageDeletes() {
-  if (!navigator.onLine) return false;
-  const key = getOfflineImageDeletesKey();
-  const pending = await offlineDbRead(key).catch(() => []);
-  if (!Array.isArray(pending) || pending.length === 0) return true;
-  const remaining = [];
-  for (const entry of pending) {
-    try {
-      const result = await deleteProductImage({ id: entry.productId, imageId: entry.imageId }, { queueOffline: false });
-      if (!result) remaining.push(entry);
-      else {
-        const localItem = items.find((item) => String(item?.id) === String(entry.productId));
-        if (localItem) {
-          localItem.image = null;
-          localItem.imageId = null;
-          localItem.imageStatus = "deleted";
-        }
-      }
-    } catch {
-      remaining.push(entry);
-    }
-  }
-  if (remaining.length > 0) {
-    await offlineDbWrite(key, remaining);
-    return false;
-  }
-  await offlineDbDelete(key);
-  return true;
 }
 
 function getSharedRevisionStorageKey() {
@@ -778,9 +703,10 @@ function normalizeItems(rawItems) {
     const initialFromLogin = storedLogin ? storedLogin.charAt(0).toUpperCase() : "";
     const normalizedStoredInitial = normalizeOwnerInitial(storedInitial);
 
+    const cleanItem = { ...item };
+    ["image", "imageId", "imageStatus", "imageUpdatedAt", "photoOperationId", "_pendingImageUpload"].forEach((field) => delete cleanItem[field]);
     return {
-      ...item,
-      imageStatus: item.imageStatus || (item.imageId ? "ready" : "deleted"),
+      ...cleanItem,
       category: String(item.category || "").trim().slice(0, 60),
       selected: item.selected === true,
       lastQuantity: item.lastQuantity ?? item.quantity,
@@ -876,13 +802,9 @@ function isMacroVisibleForSection(section) {
 
 function buildSharedPayload() {
   return {
-    // Binary photo data belongs to the private image endpoint, never to the
-    // shared JSON document sent to Airtable or downloaded by every device.
     items: items.map((item) => {
       const copy = { ...item };
-      if (typeof copy.image === "string" && copy.image.startsWith("data:image/")) {
-        copy.image = null;
-      }
+      ["image", "imageId", "imageStatus", "imageUpdatedAt", "photoOperationId", "_pendingImageUpload"].forEach((field) => delete copy[field]);
       return copy;
     }),
     settings: userSettings,
@@ -2469,7 +2391,7 @@ async function saveItems(options = {}) {
   const sharedPayload = buildSharedPayload();
   const diaryPayload = buildDiaryPayload();
 
-  // Large payloads (especially photos in older records) must not block the UI
+  // Large payloads must not block the UI
   // through synchronous localStorage serialization. IndexedDB is the primary
   // offline store; localStorage contains only small state flags and revisions.
   if (!skipSharedQueue) markPendingSharedSync();
@@ -2593,7 +2515,6 @@ async function loadItemsInBackground() {
   }
   if (cachedDiary) applyDiaryPayload(cachedDiary);
   if (cachedShared || cachedDiary) {
-    await restorePendingImages();
     renderItems();
     setActiveTab(activeTab);
     setShopLoadingStatus("Odświeżanie listy…");
@@ -2603,10 +2524,8 @@ async function loadItemsInBackground() {
   try {
     await loadItems();
     userSettingsReady = true;
-    await restorePendingImages();
     renderItems();
     setActiveTab(activeTab);
-    void migrateLegacyImages();
     setShopLoadingStatus("");
     if (!navigator.onLine) {
       const queuedCount = (await getQueuedOperations()).length;
@@ -2624,10 +2543,8 @@ async function trySyncPendingData(skipWriteWait = false) {
   const user = getActiveUser();
   const pendingShared = hasPendingSharedSync();
   const pendingDiary = hasPendingDiarySync(user);
-  const imageDeletesSynced = navigator.onLine ? await flushOfflineImageDeletes() : false;
-
   if (!pendingShared && !pendingDiary) {
-    return imageDeletesSynced;
+    return true;
   }
   if (!navigator.onLine) {
     return false;
@@ -2949,7 +2866,7 @@ function parseNutritionInputNumber(value) {
 function hasAnyNutritionValue(nutrition) {
   return nutrition.kcal != null || nutrition.protein != null || nutrition.fat != null || nutrition.carbs != null
     || nutrition.sugars != null || nutrition.salt != null || nutrition.fiber != null || nutrition.saturatedFat != null
-    || Boolean(nutrition.imageUrl || nutrition.nutriScore || nutrition.novaGroup);
+    || Boolean(nutrition.nutriScore || nutrition.novaGroup);
 }
 
 function openManualNutritionModal(productName) {
@@ -3513,14 +3430,6 @@ function createItemRow(item, order, isPurchased, section = "shop") {
   const orderBadge = document.createElement("div");
   orderBadge.className = "item-order";
   orderBadge.textContent = order;
-  const imageState = getImageTransferState(item);
-  if (imageState?.state === "success" || imageState?.state === "error") {
-    const statusDot = document.createElement("span");
-    statusDot.className = `image-status-dot image-status-dot--${imageState.state}`;
-    statusDot.title = imageState.message || (imageState.state === "success" ? "Zdjęcie dostępne" : "Zdjęcie niedostępne");
-    statusDot.setAttribute("aria-label", statusDot.title);
-    orderBadge.appendChild(statusDot);
-  }
 
   const name = document.createElement("div");
   name.className = "item-name";
@@ -3528,24 +3437,6 @@ function createItemRow(item, order, isPurchased, section = "shop") {
   nameText.className = "item-name-text";
   nameText.textContent = item.name;
   name.appendChild(nameText);
-  if (imageState?.state === "uploading" || imageState?.state === "downloading") {
-    const progress = document.createElement("div");
-    progress.className = "image-sync-progress";
-    progress.setAttribute("role", "status");
-    progress.setAttribute("aria-live", "polite");
-    const progressLabel = document.createElement("span");
-    progressLabel.textContent = imageState.state === "uploading"
-      ? "Synchronizacja zdjęcia — 100%"
-      : "Pobieranie zdjęcia — 100%";
-    const progressTrack = document.createElement("span");
-    progressTrack.className = "image-sync-progress-track";
-    const progressValue = document.createElement("span");
-    progressValue.className = "image-sync-progress-value";
-    progressValue.style.width = "100%";
-    progressTrack.appendChild(progressValue);
-    progress.append(progressLabel, progressTrack);
-    name.appendChild(progress);
-  }
 
   if (section === "all") {
     const category = document.createElement("div");
@@ -3599,17 +3490,6 @@ function createItemRow(item, order, isPurchased, section = "shop") {
   const appendProductAction = (button) => {
     (allProductActions || quantity).appendChild(button);
   };
-
-  const viewButton = document.createElement("button");
-  viewButton.type = "button";
-  viewButton.className = "item-view-button";
-  viewButton.title = "Zdjęcie produktu";
-  viewButton.textContent = "📷";
-  viewButton.addEventListener("click", (event) => {
-    event.stopPropagation();
-    showImagePreview(item);
-  });
-  appendProductAction(viewButton);
 
   if (section === "shop" && userSettings.showShoppingOwnerInfo !== false) {
     const ownerLogin = String(item.shoppingOwnerLogin || "").trim().toLowerCase();
@@ -3769,473 +3649,6 @@ function showTransferEditor(item, row, checkbox = null) {
   row.after(editor);
 }
 
-function readImageFile(file, onLoad) {
-  if (!file || !file.type.startsWith("image/")) {
-    return;
-  }
-  const reader = new FileReader();
-  reader.addEventListener("load", () => {
-    const source = String(reader.result || "");
-    const image = new Image();
-    image.onload = () => {
-      const maxSize = 1280;
-      const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(image.width * scale));
-      canvas.height = Math.max(1, Math.round(image.height * scale));
-      canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob((blob) => {
-        if (!blob) return onLoad(source);
-        const optimized = new FileReader();
-        optimized.addEventListener("load", () => onLoad(String(optimized.result || source)));
-        optimized.readAsDataURL(blob);
-      }, "image/webp", 0.78);
-    };
-    image.onerror = () => onLoad(source);
-    image.src = source;
-  });
-  reader.readAsDataURL(file);
-}
-
-function isHttpsImageUrl(value) {
-  return /^https:\/\/[^\s"'<>]+$/i.test(String(value || ""));
-}
-
-function getProductImageInfo(item) {
-  if (typeof item?.image === "string" && item.image.startsWith("data:image/")) {
-    return { url: item.image, source: "own" };
-  }
-  if (item?.imageStatus === "ready" && item?.imageId) {
-    const version = item.imageUpdatedAt ? `&v=${encodeURIComponent(item.imageUpdatedAt)}` : "";
-    return { url: `${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}&id=${encodeURIComponent(item.imageId)}${version}`, source: "own" };
-  }
-  const publicUrl = item?.nutrition?.imageUrl;
-  if (isHttpsImageUrl(publicUrl)) return { url: publicUrl, source: "public" };
-  return { url: "", source: "none" };
-}
-
-function getProductImageUrl(item) {
-  return getProductImageInfo(item).url;
-}
-
-function dataUrlToBlob(dataUrl) {
-  const value = String(dataUrl || "");
-  const match = value.match(/^data:([^;,]+)?;base64,(.*)$/s);
-  if (!match) {
-    throw new Error("Nieprawidłowy bufor zdjęcia.");
-  }
-  const mime = match[1] || "application/octet-stream";
-  const binary = atob(match[2]);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return new Blob([bytes], { type: mime });
-}
-
-async function uploadProductImage(item, imageData) {
-  if (item?.id) setImageTransferState(item.id, "uploading", "Synchronizacja zdjęcia");
-  if (!item || !imageData || !navigator.onLine) {
-    if (item && imageData) {
-      item.image = imageData;
-      item.imageStatus = "pending";
-      const pending = await getPendingPhotoRecord(item, imageData).catch(() => null);
-      if (pending) {
-        item.photoOperationId = pending.photoOperationId;
-        item.imageId = pending.imageId;
-      }
-    }
-    if (item?.id) setImageTransferState(item.id, "error", "Zdjęcie oczekuje na połączenie z internetem");
-    return false;
-  }
-  try {
-    const pending = await getPendingPhotoRecord(item, imageData);
-    // Nie używamy fetch(data:...), ponieważ mobilne przeglądarki odrzucają
-    // duże adresy data URL błędem „Failed to fetch”. Bufor został już
-    // zoptymalizowany w readImageFile(), więc konwertujemy go bezpośrednio.
-    const blob = dataUrlToBlob(imageData);
-    const imageId = pending.imageId;
-    const body = new FormData();
-    body.append("action", "upload-link");
-    body.append("productId", String(item.id));
-    body.append("product", JSON.stringify({ ...item, image: null }));
-    body.append("id", imageId);
-    body.append("photoOperationId", pending.photoOperationId);
-    body.append("family", getActiveFamily());
-    body.append("image", blob, "product.webp");
-    const upload = await fetch(`${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}`, {
-      method: "POST",
-      body,
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-    const payload = await upload.json();
-    if (!upload.ok || !payload.success) throw new Error(payload.error || "Nie udało się przesłać zdjęcia.");
-    if (payload.status !== "completed") {
-      const pendingError = new Error("Zdjęcie zapisano lokalnie, ale oczekuje na potwierdzenie Airtable.");
-      pendingError.pendingRetry = true;
-      throw pendingError;
-    }
-    item.imageId = payload.imageId;
-    item.imageUpdatedAt = payload.imageUpdatedAt || new Date().toISOString();
-    item.imageStatus = "ready";
-    item.photoOperationId = pending.photoOperationId;
-    item.image = null;
-    item._pendingImageUpload = false;
-    await offlineDbDelete(getOfflineImageKey(item.id)).catch(() => undefined);
-    await saveItems({ skipSharedQueue: true });
-    const sharedConfirmed = await verifySharedImageOnServer(item);
-    if (sharedConfirmed) {
-      setImageTransferState(item.id, "success", "Zdjęcie dostępne dla członków rodziny");
-      setSyncStatus("Zdjęcie zapisano i udostępniono członkom rodziny.");
-      return true;
-    }
-    setSyncStatus("Zdjęcie zapisano, ale oczekuje na potwierdzenie wspólnej listy.", true);
-    setImageTransferState(item.id, "error", "Zdjęcie nie zostało jeszcze potwierdzone rodzinie");
-    return false;
-  } catch (error) {
-    item.image = imageData;
-    item.imageStatus = "pending";
-    item._pendingImageUpload = true;
-    await offlineDbWrite(getOfflineImageKey(item.id), imageData).catch(() => undefined);
-    if (item?.id) setImageTransferState(item.id, "error", "Nie udało się wysłać zdjęcia");
-    throw error;
-  }
-}
-
-async function ensureImageOperationQueued(item, attempt) {
-  if (!item?.id || !item?.imageId) return;
-  const operations = await getQueuedOperations();
-  const alreadyQueued = operations.some((operation) => (
-    operation?.type === "upsert-item"
-    && String(operation?.item?.id || "") === String(item.id)
-    && String(operation?.item?.imageId || "") === String(item.imageId)
-  ));
-  if (alreadyQueued) return;
-  const copy = { ...item, image: null };
-  operations.push({
-    id: `image-sync-${item.id}-${item.imageId}-${Date.now()}-${attempt}`,
-    type: "upsert-item",
-    item: copy,
-    updatedAt: new Date().toISOString(),
-  });
-  await setQueuedOperations(operations);
-  markPendingSharedSync();
-}
-
-async function refreshSharedRevisionForImageSync() {
-  if (!navigator.onLine) return false;
-  try {
-    const response = await fetch(`${getSharedStorageUrl()}&fresh=${Date.now()}`, {
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-    if (!response.ok) return false;
-    const payload = await response.json();
-    if (typeof payload?.revision === "string" && payload.revision) {
-      sharedServerRevision = payload.revision;
-      localStorage.setItem(getSharedRevisionStorageKey(), sharedServerRevision);
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function verifySharedImageOnServer(item) {
-  if (!item?.id || !item?.imageId || !navigator.onLine) return false;
-  try {
-    const response = await fetch(`${getSharedStorageUrl()}&verify=${Date.now()}`, {
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-    if (!response.ok) return false;
-    const payload = await response.json();
-    const source = payload?.data ?? payload;
-    const serverItems = Array.isArray(source?.items) ? source.items : [];
-    const serverItem = serverItems.find((entry) => String(entry?.id || "") === String(item.id));
-    return String(serverItem?.imageId || "") === String(item.imageId);
-  } catch (error) {
-    console.warn("Weryfikacja synchronizacji zdjęcia nie powiodła się:", error?.message || "unknown");
-    return false;
-  }
-}
-
-async function deleteProductImage(item, options = {}) {
-  if (!item?.imageId) return true;
-  if (!navigator.onLine) {
-    if (options.queueOffline !== false) await queueOfflineImageDelete(item);
-    return false;
-  }
-  const body = new FormData();
-  body.append("action", "delete-link");
-  body.append("id", item.imageId);
-  body.append("productId", String(item.id || ""));
-  body.append("family", getActiveFamily());
-  const response = await fetch(`${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}`, { method: "POST", body, credentials: "same-origin", cache: "no-store" });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.success) throw new Error(payload.error || "Nie udało się usunąć zdjęcia.");
-  if (payload.status !== "completed") {
-    await queueOfflineImageDelete(item);
-    return false;
-  }
-  if (payload.removed === false) {
-    setSyncStatus("Zdjęcie zostało już zastąpione nowszym i nie wymaga usuwania.");
-  }
-  await offlineDbDelete(getOfflineImageKey(item.id)).catch(() => undefined);
-  return true;
-}
-
-async function restorePendingImages() {
-  await Promise.all(items.map(async (item) => {
-    if (!item?.id || item.image) return;
-    const cached = await offlineDbRead(getOfflineImageKey(item.id)).catch(() => null);
-    const record = cached && typeof cached === "object" ? cached : null;
-    const imageData = record?.data || (typeof cached === "string" ? cached : "");
-    if (typeof imageData === "string" && imageData.startsWith("data:image/")) {
-      item.image = imageData;
-      item.imageId = record?.imageId || item.imageId;
-      item.photoOperationId = record?.photoOperationId || item.photoOperationId;
-      item.imageStatus = "pending";
-      item._pendingImageUpload = true;
-    }
-  }));
-}
-
-async function migrateLegacyImages() {
-  if (legacyImageMigrationActive || !navigator.onLine) return;
-  const legacy = items.filter((item) => typeof item?.image === "string" && item.image.startsWith("data:image/") && (!item.imageId || item._pendingImageUpload === true));
-  if (legacy.length === 0) return;
-  legacyImageMigrationActive = true;
-  try {
-    for (const item of legacy) await uploadProductImage(item, item.image);
-    renderItems();
-  } catch (error) {
-    console.warn("Migracja starszych zdjęć zostanie ponowiona:", error);
-  } finally {
-    legacyImageMigrationActive = false;
-  }
-}
-
-function openPhotoSourceMenu(onFileSelected) {
-  const existing = document.getElementById("photo-source-menu");
-  existing?.remove();
-
-  const overlay = document.createElement("div");
-  overlay.id = "photo-source-menu";
-  overlay.className = "modal-overlay photo-source-menu";
-  const card = document.createElement("div");
-  card.className = "modal-card photo-source-card";
-  const title = document.createElement("h2");
-  title.textContent = "Dodaj zdjęcie";
-  const cameraButton = document.createElement("button");
-  cameraButton.type = "button";
-  cameraButton.textContent = "Aparat";
-  const libraryButton = document.createElement("button");
-  libraryButton.type = "button";
-  libraryButton.className = "secondary";
-  libraryButton.textContent = "Z pamięci urządzenia";
-  const cancelButton = document.createElement("button");
-  cancelButton.type = "button";
-  cancelButton.className = "secondary small";
-  cancelButton.textContent = "Anuluj";
-  const cameraInput = document.createElement("input");
-  cameraInput.type = "file";
-  cameraInput.accept = "image/*";
-  cameraInput.capture = "environment";
-  cameraInput.className = "hidden-file-input";
-  const libraryInput = document.createElement("input");
-  libraryInput.type = "file";
-  libraryInput.accept = "image/*";
-  libraryInput.className = "hidden-file-input";
-  const useFile = (input) => {
-    const file = input.files?.[0];
-    if (file) onFileSelected(file);
-    overlay.remove();
-  };
-  cameraInput.addEventListener("change", () => useFile(cameraInput));
-  libraryInput.addEventListener("change", () => useFile(libraryInput));
-  cameraButton.addEventListener("click", () => cameraInput.click());
-  libraryButton.addEventListener("click", () => libraryInput.click());
-  cancelButton.addEventListener("click", () => overlay.remove());
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) overlay.remove();
-  });
-  card.append(title, cameraButton, libraryButton, cancelButton, cameraInput, libraryInput);
-  overlay.appendChild(card);
-  document.body.appendChild(overlay);
-}
-
-function createImagePreviewOverlay() {
-  const overlay = document.createElement("div");
-  overlay.id = "image-preview-overlay";
-  overlay.className = "image-preview-overlay hidden";
-
-  const closeButton = document.createElement("button");
-  closeButton.type = "button";
-  closeButton.className = "image-preview-close";
-  closeButton.textContent = "✕";
-  closeButton.addEventListener("click", (event) => {
-    event.stopPropagation();
-    overlay.classList.add("hidden");
-  });
-
-  const image = document.createElement("img");
-  image.alt = "Zdjęcie produktu";
-  image.classList.add("hidden");
-  const imageFrame = document.createElement("div");
-  imageFrame.className = "image-preview-frame";
-  const nutritionBadge = document.createElement("div");
-  nutritionBadge.className = "image-preview-nutrition-badge hidden";
-  nutritionBadge.setAttribute("aria-label", "Oznaczenia żywieniowe produktu");
-  imageFrame.append(image, nutritionBadge);
-
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) {
-      overlay.classList.add("hidden");
-    }
-  });
-
-  const placeholder = document.createElement("div");
-  placeholder.className = "image-preview-placeholder hidden";
-  const previewStatus = document.createElement("p");
-  previewStatus.className = "image-preview-status";
-  previewStatus.setAttribute("role", "status");
-  previewStatus.setAttribute("aria-live", "polite");
-
-  const actionButton = document.createElement("button");
-  actionButton.type = "button";
-  actionButton.className = "image-preview-action";
-  actionButton.addEventListener("click", (event) => {
-    event.stopPropagation();
-    openPhotoSourceMenu((file) => {
-      readImageFile(file, (image) => {
-        if (!currentPreviewItem) return;
-        currentPreviewItem.image = image;
-        renderItems();
-        showImagePreview(currentPreviewItem);
-        void uploadProductImage(currentPreviewItem, image).then(() => {
-          previewStatus.textContent = "Zdjęcie zapisano i udostępniono rodzinie.";
-          renderItems();
-          showImagePreview(currentPreviewItem);
-        }).catch((error) => {
-          previewStatus.textContent = `Nie udało się udostępnić zdjęcia: ${error.message}`;
-          setSyncStatus(`Nie udało się udostępnić zdjęcia rodzinie: ${error.message}`, true);
-        });
-      });
-    });
-  });
-
-  const deleteButton = document.createElement("button");
-  deleteButton.type = "button";
-  deleteButton.className = "image-preview-delete hidden";
-  deleteButton.textContent = "Usuń zdjęcie";
-  deleteButton.addEventListener("click", (event) => {
-    event.stopPropagation();
-    if (currentPreviewItem) {
-      const target = currentPreviewItem;
-      const expectedImageId = target.imageId;
-      target.image = null;
-      target.imageId = null;
-      target.imageStatus = "pending_delete";
-      previewStatus.textContent = "Usuwanie zdjęcia — synchronizacja…";
-      renderItems();
-      void deleteProductImage({ ...target, imageId: expectedImageId }).then(async (deletedOnline) => {
-        target.imageStatus = deletedOnline ? "deleted" : "pending_delete";
-        previewStatus.textContent = deletedOnline ? "Zdjęcie usunięte." : "Usunięcie zdjęcia oczekuje na synchronizację.";
-        if (!deletedOnline) setSyncStatus("Usunięcie zdjęcia oczekuje na synchronizację.", true);
-        await saveItems({ skipSharedQueue: true });
-      }).catch(async (error) => {
-        await queueOfflineImageDelete({ ...target, imageId: expectedImageId });
-        target.imageStatus = "pending_delete";
-        previewStatus.textContent = `Usunięcie zdjęcia oczekuje na synchronizację: ${error.message}`;
-        setSyncStatus("Usunięcie zdjęcia oczekuje na synchronizację.", true);
-        await saveItems({ skipSharedQueue: true });
-      }).then(() => {
-        renderItems();
-        showImagePreview(target);
-      });
-    }
-  });
-
-  const actions = document.createElement("div");
-  actions.className = "image-preview-actions";
-  actions.appendChild(actionButton);
-  actions.appendChild(deleteButton);
-
-  const content = document.createElement("div");
-  content.className = "image-preview-content";
-  content.appendChild(imageFrame);
-  content.appendChild(placeholder);
-  content.appendChild(previewStatus);
-  content.appendChild(actions);
-
-  overlay.appendChild(closeButton);
-  overlay.appendChild(content);
-  document.body.appendChild(overlay);
-}
-
-function getNutritionBadgeText(nutrition) {
-  if (!nutrition || typeof nutrition !== "object") return "";
-  const parts = [];
-  if (nutrition.nutriScore) parts.push(`Nutri-Score: ${String(nutrition.nutriScore).toUpperCase()}`);
-  if (nutrition.novaGroup != null) parts.push(`NOVA: ${nutrition.novaGroup}`);
-  return parts.join(" • ");
-}
-
-function showImagePreview(item) {
-  let overlay = document.getElementById("image-preview-overlay");
-  if (!overlay) {
-    createImagePreviewOverlay();
-    overlay = document.getElementById("image-preview-overlay");
-  }
-
-  currentPreviewItem = item;
-  const image = overlay.querySelector("img");
-  const nutritionBadge = overlay.querySelector(".image-preview-nutrition-badge");
-  const placeholder = overlay.querySelector(".image-preview-placeholder");
-  const actionButton = overlay.querySelector(".image-preview-action");
-
-  const deleteButton = overlay.querySelector(".image-preview-delete");
-
-  const imageInfo = getProductImageInfo(item);
-  const imageSource = imageInfo.url;
-  if (imageSource) {
-    if (imageInfo.source === "own" && item.imageId && !item.image) {
-      setImageTransferState(item.id, "downloading", "Pobieranie zdjęcia");
-      image.addEventListener("load", () => setImageTransferState(item.id, "success", "Zdjęcie pobrane na urządzenie"), { once: true });
-      image.addEventListener("error", () => setImageTransferState(item.id, "error", "Nie udało się pobrać zdjęcia"), { once: true });
-    }
-    image.src = imageSource;
-    image.classList.remove("hidden");
-    placeholder.classList.add("hidden");
-    actionButton.textContent = imageInfo.source === "public" ? "Dodaj własne zdjęcie" : "Zmień zdjęcie";
-    if (imageInfo.source === "public") {
-      const badgeText = getNutritionBadgeText(item.nutrition);
-      nutritionBadge.textContent = badgeText;
-      nutritionBadge.classList.toggle("hidden", !badgeText);
-      deleteButton.classList.add("hidden");
-    } else {
-      nutritionBadge.textContent = "";
-      nutritionBadge.classList.add("hidden");
-      deleteButton.classList.remove("hidden");
-    }
-  } else {
-    image.classList.add("hidden");
-    image.src = "";
-    placeholder.classList.remove("hidden");
-    placeholder.textContent = "Brak zdjęcia produktu.";
-    actionButton.textContent = "Dodaj zdjęcie";
-    deleteButton.classList.add("hidden");
-    nutritionBadge.textContent = "";
-    nutritionBadge.classList.add("hidden");
-  }
-
-  overlay.classList.remove("hidden");
-}
-
 function openProductEditor(item) {
   document.getElementById("product-editor")?.remove();
   const overlay = document.createElement("div");
@@ -4243,8 +3656,6 @@ function openProductEditor(item) {
   overlay.className = "modal-overlay";
   const card = document.createElement("div");
   card.className = "modal-card product-editor-card";
-  let pendingImage = item.image || null;
-  let removePhotoRequested = false;
   const title = document.createElement("h2");
   title.textContent = "Edytuj produkt";
   const form = document.createElement("div");
@@ -4286,27 +3697,6 @@ function openProductEditor(item) {
   });
   categoryInput.setAttribute("list", datalist.id);
   form.appendChild(datalist);
-  const photoButton = document.createElement("button");
-  photoButton.type = "button";
-  photoButton.className = "secondary";
-  photoButton.textContent = pendingImage ? "Zmień zdjęcie" : "Dodaj zdjęcie";
-  photoButton.addEventListener("click", () => {
-    openPhotoSourceMenu((file) => {
-      readImageFile(file, (image) => {
-        pendingImage = image;
-        photoButton.textContent = "Zmień zdjęcie";
-      });
-    });
-  });
-  const removePhotoButton = document.createElement("button");
-  removePhotoButton.type = "button";
-  removePhotoButton.className = "secondary small";
-  removePhotoButton.textContent = "Usuń zdjęcie";
-  removePhotoButton.addEventListener("click", () => {
-    pendingImage = null;
-    removePhotoRequested = true;
-    photoButton.textContent = "Dodaj zdjęcie";
-  });
   const status = document.createElement("p");
   status.className = "panel-note";
   status.setAttribute("role", "status");
@@ -4328,40 +3718,15 @@ function openProductEditor(item) {
     item.unit = unitInput.value || "szt";
     item.category = categoryInput.value.trim().slice(0, 60);
     saveButton.disabled = true;
-    removePhotoButton.disabled = true;
-    photoButton.disabled = true;
-      status.textContent = "Zapisywanie produktu i zdjęcia…";
+      status.textContent = "Zapisywanie produktu…";
       try {
-      if (removePhotoRequested && item.imageId) {
-        const expectedImageId = item.imageId;
-        item.image = null;
-        item.imageId = null;
-        item.imageStatus = "pending_delete";
-        status.textContent = "Usuwanie zdjęcia — synchronizacja…";
-        try {
-          const deletedOnline = await deleteProductImage({ ...item, imageId: expectedImageId });
-          item.imageStatus = deletedOnline ? "deleted" : "pending_delete";
-          if (!deletedOnline) status.textContent = "Usunięcie zdjęcia oczekuje na synchronizację.";
-        } catch (deleteError) {
-          await queueOfflineImageDelete({ ...item, imageId: expectedImageId });
-          status.textContent = `Usunięcie zdjęcia oczekuje na synchronizację: ${deleteError.message}`;
-        }
-      }
-      item.image = pendingImage;
-      if (pendingImage && navigator.onLine) {
-        await uploadProductImage(item, pendingImage);
-      } else if (pendingImage) {
-        await offlineDbWrite(getOfflineImageKey(item.id), pendingImage);
-      }
-      await saveItems({ skipSharedQueue: removePhotoRequested || Boolean(pendingImage) });
+      await saveItems();
       renderItems();
       overlay.remove();
     } catch (error) {
-      status.textContent = `Nie udało się zapisać zdjęcia: ${error.message}. Zdjęcie zachowano lokalnie i zostanie ponowione po odzyskaniu połączenia.`;
+      status.textContent = `Nie udało się zapisać produktu: ${error.message}`;
       status.classList.add("error");
       saveButton.disabled = false;
-      removePhotoButton.disabled = false;
-      photoButton.disabled = false;
     }
   });
   const cancelButton = document.createElement("button");
@@ -4369,7 +3734,7 @@ function openProductEditor(item) {
   cancelButton.className = "secondary";
   cancelButton.textContent = "Anuluj";
   cancelButton.addEventListener("click", () => overlay.remove());
-  actions.append(photoButton, removePhotoButton, saveButton, cancelButton);
+  actions.append(saveButton, cancelButton);
   card.append(title, form, status, actions);
   overlay.appendChild(card);
   overlay.addEventListener("click", (event) => {
@@ -4418,9 +3783,6 @@ function resetForm() {
   productQuantity.value = "1";
   productUnit.value = "szt";
   if (productCategory) productCategory.value = "";
-  pendingNewItemImage = null;
-  productImageButton?.classList.remove("has-image");
-  if (productImageButton) productImageButton.title = "Zdjęcie produktu";
 }
 
 function addItem() {
@@ -4447,8 +3809,6 @@ function addItem() {
     lastUnit: unit,
     shoppingOwnerLogin: getCurrentUserLogin(),
     shoppingOwnerInitial: getCurrentUserInitial(),
-    image: null,
-    imageId: null,
   };
 
   function finalize() {
@@ -4459,15 +3819,7 @@ function addItem() {
     setActiveTab("shop");
   }
 
-  if (pendingNewItemImage) {
-    newItem.image = pendingNewItemImage;
-    finalize();
-    void uploadProductImage(newItem, pendingNewItemImage).then(() => renderItems()).catch((error) => {
-      setSyncStatus(`Nie udało się udostępnić zdjęcia rodzinie: ${error.message}`, true);
-    });
-  } else {
-    finalize();
-  }
+  finalize();
 }
 
 function moveSelectedItemsToPurchased() {
@@ -4658,15 +4010,6 @@ logoutButton.addEventListener("click", () => {
   showLoginScreen();
 });
 addItemButton.addEventListener("click", addItem);
-productImageButton?.addEventListener("click", () => {
-  openPhotoSourceMenu((file) => {
-    readImageFile(file, (image) => {
-      pendingNewItemImage = image;
-      productImageButton.classList.add("has-image");
-      productImageButton.title = "Zdjęcie wybrane — kliknij, aby zmienić";
-    });
-  });
-});
 clearPurchasedButton.addEventListener("click", moveSelectedItemsToPurchased);
 shopSortToggleButton?.addEventListener("click", toggleShoppingSortMode);
 window.addEventListener("resize", updateShoppingSortButtonWidth);

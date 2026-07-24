@@ -6,6 +6,18 @@ appRequireSameOriginForWrite();
 appRequireSuperAdmin();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') appJsonError(405, 'Dozwolony jest wyłącznie POST.');
 function normalizeFamilySlug($value) { return trim(preg_replace('/[^a-z0-9._-]+/i', '-', strtolower((string) $value)), '-'); }
+function stripPhotoMetadata($payload) {
+    if (!is_array($payload)) return $payload;
+    if (isset($payload['items']) && is_array($payload['items'])) {
+        foreach ($payload['items'] as &$item) {
+            if (!is_array($item)) continue;
+            foreach (['image', 'imageId', 'imageStatus', 'imageUpdatedAt', 'photoOperationId'] as $field) unset($item[$field]);
+            if (isset($item['nutrition']) && is_array($item['nutrition'])) unset($item['nutrition']['imageUrl']);
+        }
+        unset($item);
+    }
+    return $payload;
+}
 
 $payload = json_decode(file_get_contents('php://input') ?: '', true);
 $family = normalizeFamilySlug($payload['family'] ?? '');
@@ -35,6 +47,7 @@ foreach ($files as $file) {
     $user = pathinfo($file, PATHINFO_FILENAME);
     $data = json_decode(file_get_contents($file) ?: '', true);
     if (!is_array($data)) continue;
+    $data = stripPhotoMetadata($data);
     $userKey = $family . ':' . $user;
     $formula = rawurlencode("{$userField}='{$userKey}'");
     $url = "https://api.airtable.com/v0/{$base}/{$encodedTable}?maxRecords=1&filterByFormula=" . $formula;

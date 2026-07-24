@@ -1,9 +1,9 @@
-const CACHE_NAME = "shopping-list-shell-v43";
+const CACHE_NAME = "shopping-list-shell-v44";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
-  "./script.js?v=43",
+  "./script.js?v=44",
   "./manifest.webmanifest",
   "./app-icons/app-icon.svg",
 ];

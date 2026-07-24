@@ -74,12 +74,6 @@ function firstValue($source, $keys) {
     return null;
 }
 
-function httpsUrlOrNull($value) {
-    $value = trim((string) $value);
-    if ($value === '' || !filter_var($value, FILTER_VALIDATE_URL)) return null;
-    return strtolower((string) parse_url($value, PHP_URL_SCHEME)) === 'https' ? $value : null;
-}
-
 function nutritionHasData($values) {
     foreach ($values as $value) {
         if ($value !== null && $value !== '') return true;
@@ -104,13 +98,12 @@ function nutritionFromOpenFoodFacts($query) {
     $salt = firstValue($nutriments, ['salt_100g', 'salt_value', 'salt']);
     $fiber = firstValue($nutriments, ['fiber_100g', 'fiber_value', 'fiber']);
     $saturatedFat = firstValue($nutriments, ['saturated-fat_100g', 'saturated-fat_value', 'saturated-fat']);
-    $imageUrl = httpsUrlOrNull($product['image_front_url'] ?? ($product['image_url'] ?? null));
     $nutriScore = strtolower(trim((string) ($product['nutriscore_grade'] ?? ($product['nutriscore'] ?? ''))));
     if (!preg_match('/^[a-e]$/', $nutriScore)) $nutriScore = null;
     $novaGroup = $product['nova_group'] ?? ($product['nova_groups'] ?? null);
     if (!is_int($novaGroup) && !is_float($novaGroup) && !preg_match('/^[1-4]$/', trim((string) $novaGroup))) $novaGroup = null;
 
-    if (!nutritionHasData([$kcal, $protein, $fat, $carbs, $sugars, $salt, $fiber, $saturatedFat, $imageUrl, $nutriScore, $novaGroup])) {
+    if (!nutritionHasData([$kcal, $protein, $fat, $carbs, $sugars, $salt, $fiber, $saturatedFat, $nutriScore, $novaGroup])) {
         return null;
     }
 
@@ -125,7 +118,6 @@ function nutritionFromOpenFoodFacts($query) {
         'salt' => $salt,
         'fiber' => $fiber,
         'saturatedFat' => $saturatedFat,
-        'imageUrl' => $imageUrl,
         'nutriScore' => $nutriScore,
         'novaGroup' => $novaGroup,
     ];
@@ -168,13 +160,12 @@ function nutritionFromOpenFoodRepo($query) {
     $salt = firstValue($values, ['salt_100g', 'salt_value', 'salt']);
     $fiber = firstValue($values, ['fiber_100g', 'fiber_value', 'fiber', 'fibre']);
     $saturatedFat = firstValue($values, ['saturated-fat_100g', 'saturated-fat_value', 'saturated-fat', 'saturated_fat']);
-    $imageUrl = httpsUrlOrNull($product['image_front_url'] ?? ($product['image_url'] ?? ($product['imageUrl'] ?? null)));
     $nutriScore = strtolower(trim((string) ($product['nutriscore_grade'] ?? ($product['nutriscore'] ?? ''))));
     if (!preg_match('/^[a-e]$/', $nutriScore)) $nutriScore = null;
     $novaGroup = $product['nova_group'] ?? ($product['nova_groups'] ?? null);
     if (!is_int($novaGroup) && !is_float($novaGroup) && !preg_match('/^[1-4]$/', trim((string) $novaGroup))) $novaGroup = null;
 
-    if (!nutritionHasData([$kcal, $protein, $fat, $carbs, $sugars, $salt, $fiber, $saturatedFat, $imageUrl, $nutriScore, $novaGroup])) {
+    if (!nutritionHasData([$kcal, $protein, $fat, $carbs, $sugars, $salt, $fiber, $saturatedFat, $nutriScore, $novaGroup])) {
         return null;
     }
 
@@ -189,7 +180,6 @@ function nutritionFromOpenFoodRepo($query) {
         'salt' => $salt,
         'fiber' => $fiber,
         'saturatedFat' => $saturatedFat,
-        'imageUrl' => $imageUrl,
         'nutriScore' => $nutriScore,
         'novaGroup' => $novaGroup,
     ];
