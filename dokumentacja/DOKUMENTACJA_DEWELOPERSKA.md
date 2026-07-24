@@ -2,6 +2,25 @@
 
 ## Architektura
 
+## Aktualny stan po wdrozeniu v43
+
+Frontend korzysta z `index.html`, `script.js`, `styles.css` i `sw.js` w wersji
+cache PWA `v43`. `api/maintenance-status.php` udostepnia status trybu
+serwisowego, a flaga `/app-private/maintenance.flag` znajduje sie poza
+webrootem. Gdy flaga istnieje, chronione endpointy korzystajace z
+`api/security.php` zwracaja HTTP 503, a klient pokazuje ekran aktualizacji.
+
+`api/nutrition.php` zwraca w polu `nutrition` makro podstawowe oraz `sugars`,
+`salt`, `fiber`, `saturatedFat`, `imageUrl`, `nutriScore` i `novaGroup`.
+Zrodla sa odpytywane w kolejnosci Open Food Facts, a nastepnie Open Food Repo.
+Brakujace wartosci pozostaja `null`, a obrazy sa akceptowane tylko jako adresy
+HTTPS.
+
+Wlasne zdjecie produktu ma pierwszenstwo przed publicznym `nutrition.imageUrl`.
+Jesli wlasnego zdjecia brak, klient pokazuje zdjecie opakowania jako fallback i
+naklada na jego dolna krawedz dostepne oznaczenia Nutri-Score oraz NOVA.
+Nakladka nie jest pokazywana na wlasnym zdjeciu.
+
 Aplikacja jest lekką aplikacją PHP/JavaScript działającą z Apache. `index.html`, `styles.css`, `script.js`, `sw.js` i manifest PWA tworzą klienta. Katalog `api/` zawiera endpointy PHP. Dane aplikacji i konfiguracja prywatna powinny znajdować się poza webrootem; blokada `.htaccess` jest tylko dodatkową warstwą ochronną.
 
 ## Główne pliki
@@ -9,7 +28,7 @@ Aplikacja jest lekką aplikacją PHP/JavaScript działającą z Apache. `index.h
 - `index.html` — struktura widoków logowania, list, ustawień i paneli administracyjnych.
 - `script.js` — stan klienta, renderowanie, IndexedDB/localStorage, kolejka offline, wywołania API i synchronizacja.
 - `styles.css` — układ responsywny, karty, kategorie i akcje produktów.
-- `sw.js` — cache zasobów PWA; po zmianach interfejsu zwiększ wersję cache (aktualnie `v17`).
+- `sw.js` — cache zasobów PWA; po zmianach interfejsu zwiększ wersję cache (aktualnie `v43`).
 - `api/security.php` — sesje, autoryzacja, hashowanie i wspólne odpowiedzi JSON.
 - `api/families.php` — rodziny, superadministrator i operacje administracyjne.
 - `api/user-accounts.php` — konta rodziny, role, edycja kont i `change_own_password`.
@@ -50,6 +69,17 @@ Token i identyfikatory konfiguracji przechowuj poza publicznym repozytorium i we
 Lokalnie potrzebny jest PHP z JSON i cURL oraz zapisywalne prywatne katalogi danych i backupów. Uruchom serwer developerski PHP z katalogu projektu. Produkcyjnie publikuj tylko kod aplikacji, ustaw prywatną konfigurację poza webrootem, wymuś HTTPS i używaj seryjnego procesu snapshot → wdrożenie → test → weryfikacja.
 
 ## Testy regresji
+
+Przy zmianach nutrition sprawdz odpowiedzi z pelnymi, czesciowymi i brakujacymi
+danymi obu zrodel, walidacje HTTPS obrazu, zapis/odczyt pola `nutrition` oraz
+tryb offline. Dla interfejsu sprawdz pierwszenstwo wlasnego zdjecia, fallback
+zdjecia opakowania i nakladke z oboma lub pojedynczym oznaczeniem.
+
+Przy wdrozeniu wykonaj snapshot tylko zmienianych plikow z manifestem SHA-256,
+wdroz obsluge flagi, wlacz `/app-private/maintenance.flag`, potwierdz przez
+HTTPS odpowiedz 503, przeslij reszte plikow, porownaj sumy i wykonaj test HTTPS.
+Usun flage dopiero po pozytywnej weryfikacji i potwierdz status
+`maintenance:false`.
 
 Przed publikacją sprawdź logowanie i wylogowanie, izolację rodzin, zmianę haseł, zapis i odczyt produktów, zdjęcia, kategorie, potwierdzenie usuwania, ustawienia, tryb offline, synchronizację Airtable, nagłówki oraz blokadę plików prywatnych. Wykonaj `php -l` dla zmienionych endpointów i skan sekretów przed commitem.
 

@@ -164,6 +164,7 @@ const SERVER_STORAGE_URL = "api/products.php";
 const ACCOUNTS_STORAGE_URL = "api/user-accounts.php";
 const FAMILIES_STORAGE_URL = "api/families.php";
 const NUTRITION_PROXY_URL = "api/nutrition.php";
+const MAINTENANCE_STATUS_URL = "api/maintenance-status.php";
 const AIRTABLE_HEALTH_URL = "api/airtable-health.php";
 const PRODUCT_IMAGE_URL = "api/product-image.php";
 const CLIENT_STORAGE_VERSION = "2026-07-20-storage-v2";
@@ -172,6 +173,7 @@ const OFFLINE_DB_NAME = "shopping-list-offline";
 const OFFLINE_DB_VERSION = 1;
 const OFFLINE_ACCESS_DAYS = 14;
 let useServerStorage = true;
+let maintenanceMode = false;
 const DEFAULT_USER_SETTINGS = {
   macroDisplayMode: "per100g",
   showMacroProducts: false,
@@ -2743,6 +2745,18 @@ function formatNutritionLabel(nutrition, item = null, options = {}) {
   if (nutrition.carbs != null) {
     parts.push(`W: ${formatQuantity(valueForDisplay(nutrition.carbs))} g`);
   }
+  if (nutrition.sugars != null) {
+    parts.push(`cukry: ${formatQuantity(valueForDisplay(nutrition.sugars))} g`);
+  }
+  if (nutrition.salt != null) {
+    parts.push(`sól: ${formatQuantity(valueForDisplay(nutrition.salt))} g`);
+  }
+  if (nutrition.fiber != null) {
+    parts.push(`błonnik: ${formatQuantity(valueForDisplay(nutrition.fiber))} g`);
+  }
+  if (nutrition.saturatedFat != null) {
+    parts.push(`nasycone: ${formatQuantity(valueForDisplay(nutrition.saturatedFat))} g`);
+  }
 
   if (mode === "perAmount") {
     parts.push(scale == null ? "(na ilość: brak skali)" : "(na ilość produktu)");
@@ -2933,7 +2947,9 @@ function parseNutritionInputNumber(value) {
 }
 
 function hasAnyNutritionValue(nutrition) {
-  return nutrition.kcal != null || nutrition.protein != null || nutrition.fat != null || nutrition.carbs != null;
+  return nutrition.kcal != null || nutrition.protein != null || nutrition.fat != null || nutrition.carbs != null
+    || nutrition.sugars != null || nutrition.salt != null || nutrition.fiber != null || nutrition.saturatedFat != null
+    || Boolean(nutrition.imageUrl || nutrition.nutriScore || nutrition.novaGroup);
 }
 
 function openManualNutritionModal(productName) {
@@ -3781,13 +3797,25 @@ function readImageFile(file, onLoad) {
   reader.readAsDataURL(file);
 }
 
-function getProductImageUrl(item) {
-  if (item?.imageStatus !== "ready") return "";
-  if (item?.imageId) {
-    const version = item.imageUpdatedAt ? `&v=${encodeURIComponent(item.imageUpdatedAt)}` : "";
-    return `${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}&id=${encodeURIComponent(item.imageId)}${version}`;
+function isHttpsImageUrl(value) {
+  return /^https:\/\/[^\s"'<>]+$/i.test(String(value || ""));
+}
+
+function getProductImageInfo(item) {
+  if (typeof item?.image === "string" && item.image.startsWith("data:image/")) {
+    return { url: item.image, source: "own" };
   }
-  return "";
+  if (item?.imageStatus === "ready" && item?.imageId) {
+    const version = item.imageUpdatedAt ? `&v=${encodeURIComponent(item.imageUpdatedAt)}` : "";
+    return { url: `${PRODUCT_IMAGE_URL}?${getFamilyQueryPart()}&id=${encodeURIComponent(item.imageId)}${version}`, source: "own" };
+  }
+  const publicUrl = item?.nutrition?.imageUrl;
+  if (isHttpsImageUrl(publicUrl)) return { url: publicUrl, source: "public" };
+  return { url: "", source: "none" };
+}
+
+function getProductImageUrl(item) {
+  return getProductImageInfo(item).url;
 }
 
 function dataUrlToBlob(dataUrl) {
@@ -4057,6 +4085,12 @@ function createImagePreviewOverlay() {
   const image = document.createElement("img");
   image.alt = "Zdjęcie produktu";
   image.classList.add("hidden");
+  const imageFrame = document.createElement("div");
+  imageFrame.className = "image-preview-frame";
+  const nutritionBadge = document.createElement("div");
+  nutritionBadge.className = "image-preview-nutrition-badge hidden";
+  nutritionBadge.setAttribute("aria-label", "Oznaczenia żywieniowe produktu");
+  imageFrame.append(image, nutritionBadge);
 
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) {
@@ -4133,7 +4167,7 @@ function createImagePreviewOverlay() {
 
   const content = document.createElement("div");
   content.className = "image-preview-content";
-  content.appendChild(image);
+  content.appendChild(imageFrame);
   content.appendChild(placeholder);
   content.appendChild(previewStatus);
   content.appendChild(actions);
@@ -4141,6 +4175,14 @@ function createImagePreviewOverlay() {
   overlay.appendChild(closeButton);
   overlay.appendChild(content);
   document.body.appendChild(overlay);
+}
+
+function getNutritionBadgeText(nutrition) {
+  if (!nutrition || typeof nutrition !== "object") return "";
+  const parts = [];
+  if (nutrition.nutriScore) parts.push(`Nutri-Score: ${String(nutrition.nutriScore).toUpperCase()}`);
+  if (nutrition.novaGroup != null) parts.push(`NOVA: ${nutrition.novaGroup}`);
+  return parts.join(" • ");
 }
 
 function showImagePreview(item) {
@@ -4152,14 +4194,16 @@ function showImagePreview(item) {
 
   currentPreviewItem = item;
   const image = overlay.querySelector("img");
+  const nutritionBadge = overlay.querySelector(".image-preview-nutrition-badge");
   const placeholder = overlay.querySelector(".image-preview-placeholder");
   const actionButton = overlay.querySelector(".image-preview-action");
 
   const deleteButton = overlay.querySelector(".image-preview-delete");
 
-  const imageSource = getProductImageUrl(item);
+  const imageInfo = getProductImageInfo(item);
+  const imageSource = imageInfo.url;
   if (imageSource) {
-    if (item.imageId && !item.image) {
+    if (imageInfo.source === "own" && item.imageId && !item.image) {
       setImageTransferState(item.id, "downloading", "Pobieranie zdjęcia");
       image.addEventListener("load", () => setImageTransferState(item.id, "success", "Zdjęcie pobrane na urządzenie"), { once: true });
       image.addEventListener("error", () => setImageTransferState(item.id, "error", "Nie udało się pobrać zdjęcia"), { once: true });
@@ -4167,8 +4211,17 @@ function showImagePreview(item) {
     image.src = imageSource;
     image.classList.remove("hidden");
     placeholder.classList.add("hidden");
-    actionButton.textContent = "Zmień zdjęcie";
-    deleteButton.classList.remove("hidden");
+    actionButton.textContent = imageInfo.source === "public" ? "Dodaj własne zdjęcie" : "Zmień zdjęcie";
+    if (imageInfo.source === "public") {
+      const badgeText = getNutritionBadgeText(item.nutrition);
+      nutritionBadge.textContent = badgeText;
+      nutritionBadge.classList.toggle("hidden", !badgeText);
+      deleteButton.classList.add("hidden");
+    } else {
+      nutritionBadge.textContent = "";
+      nutritionBadge.classList.add("hidden");
+      deleteButton.classList.remove("hidden");
+    }
   } else {
     image.classList.add("hidden");
     image.src = "";
@@ -4176,6 +4229,8 @@ function showImagePreview(item) {
     placeholder.textContent = "Brak zdjęcia produktu.";
     actionButton.textContent = "Dodaj zdjęcie";
     deleteButton.classList.add("hidden");
+    nutritionBadge.textContent = "";
+    nutritionBadge.classList.add("hidden");
   }
 
   overlay.classList.remove("hidden");
@@ -4429,6 +4484,7 @@ function moveSelectedItemsToPurchased() {
 }
 
 async function attemptLogin() {
+  if (maintenanceMode) return;
   if (!getActiveFamily()) {
     loginError.textContent = "Najpierw wybierz rodzinę.";
     showFamilyScreen();
@@ -4760,6 +4816,7 @@ function migrateClientStorage() {
 }
 
 async function initializeApplication() {
+  if (await checkMaintenanceMode()) return;
   migrateClientStorage();
   ensureDiaryDateDefault();
   await loadFamilies();
@@ -4803,6 +4860,25 @@ async function initializeApplication() {
     showFamilyScreen();
   } else {
     showLoginScreen();
+  }
+}
+
+async function checkMaintenanceMode() {
+  try {
+    const response = await fetch(MAINTENANCE_STATUS_URL, { credentials: "same-origin", cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok || payload?.maintenance !== true) return false;
+    maintenanceMode = true;
+    document.body.innerHTML = `
+      <main class="maintenance-screen" role="status" aria-live="polite">
+        <section class="card maintenance-card">
+          <h1>Trwa aktualizacja aplikacji</h1>
+          <p>Aplikacja jest chwilowo niedostępna. Spróbuj ponownie za chwilę.</p>
+        </section>
+      </main>`;
+    return true;
+  } catch {
+    return false;
   }
 }
 

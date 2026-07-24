@@ -11,6 +11,22 @@ Ten plik jest lokalnym rejestrem projektu. Nie zawiera haseł, tokenów, danych 
 
 ## Chronologia
 
+### Rozszerzenie danych nutrition i zdjec opakowan - 2026-07-24
+
+Rozszerzono proxy nutrition o cukry, sol, blonnik, nasycone kwasy tluszczowe,
+zdjecie opakowania HTTPS, Nutri-Score i NOVA dla Open Food Facts oraz fallbacku
+Open Food Repo. Wlasne zdjecie pozostaje wazniejsze od publicznego obrazu, a
+oznaczenia sa nakladane tylko na publicznym fallbacku.
+
+### Tryb serwisowy i wdrozenie v43 - 2026-07-24
+
+Dodano `api/maintenance-status.php`, flage `/app-private/maintenance.flag`,
+blokade chronionych endpointow odpowiedzia HTTP 503 oraz ekran aktualizacji w
+kliencie. Snapshoty FTP wykonano przed transferem (`maintenance-support-3` i
+`nutrition-extension`), a pliki zweryfikowano sumami SHA-256. Potwierdzono
+dzialanie blokady 503, usunieto flage po wdrozeniu i uzyskano koncowy HTTPS 200
+oraz `maintenance:false`. Dokumentacja i kod pozostaly bez commit/push.
+
 ### Audyt bezpieczeństwa
 
 Zidentyfikowano ryzyka związane z konfiguracją Airtable, danymi pod webrootem, limitami logowania, sesjami, nagłówkami, uploadem zdjęć i publicznym endpointem żywieniowym. Ustalono przechowywanie sekretów i danych poza webrootem oraz stosowanie prywatnych snapshotów.

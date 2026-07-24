@@ -28,6 +28,14 @@ Jeśli karta **Moja dieta** jest wyłączona, nie pojawi się po zalogowaniu ani
 
 ## Administrator rodziny
 
+## Dodatkowe dane produktu
+
+Karta produktu moze pokazac cukry, sol, blonnik i nasycone kwasy tluszczowe.
+Jezeli produkt ma dane z publicznej bazy, aplikacja moze uzyc zdjecia
+opakowania jako obrazu zastepczego. Na dole takiego zdjecia pojawiaja sie
+dostepne oznaczenia Nutri-Score i NOVA. Wlasne zdjecie dodane przez uzytkownika
+zawsze ma pierwszenstwo i nie otrzymuje tej publicznej nakladki.
+
 Administrator rodziny może zarządzać kontami własnej rodziny, rolami administratorów i produktami. Nie ma dostępu do globalnej konfiguracji Airtable ani synchronizacji superadministratora.
 
 ## PWA i synchronizacja

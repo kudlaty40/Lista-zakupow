@@ -97,7 +97,9 @@ try {
             $snapshotPath = "$remoteSnapshot/files/$($entry.Path)"
             $snapshotDir = Split-Path -Parent $snapshotPath
             $commands.Add('get ' + (Quote-WinScpValue $entry.Remote) + ' ' + (Quote-WinScpValue $beforePath))
-            $commands.Add('mkdir ' + (Quote-WinScpValue $snapshotDir.Replace('\', '/')))
+            if ($snapshotDir.Replace('\', '/') -ne "$remoteSnapshot/files") {
+                $commands.Add('mkdir ' + (Quote-WinScpValue $snapshotDir.Replace('\', '/')))
+            }
             $commands.Add('put ' + (Quote-WinScpValue $beforePath) + ' ' + (Quote-WinScpValue $snapshotPath))
         }
 

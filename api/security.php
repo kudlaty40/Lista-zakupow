@@ -41,6 +41,23 @@ function appAirtableConfig() {
     return is_array($config['airtable'] ?? null) ? $config['airtable'] : [];
 }
 
+function appMaintenanceFlagPath() {
+    return dirname(__DIR__, 2) . '/app-private/maintenance.flag';
+}
+
+function appIsMaintenanceMode() {
+    return is_file(appMaintenanceFlagPath());
+}
+
+function appRejectIfMaintenance() {
+    if (!appIsMaintenanceMode()) return;
+    if (!headers_sent()) {
+        header('Cache-Control: no-store, private');
+        header('Retry-After: 60');
+    }
+    appJsonError(503, 'Aplikacja jest chwilowo aktualizowana. Spróbuj ponownie za chwilę.');
+}
+
 function appStorageDir() {
     $configured = trim((string) (appPrivateConfig()['storage_dir'] ?? ''));
     if ($configured === '' || !is_dir($configured) || !is_writable($configured)) {
@@ -230,4 +247,8 @@ function appVerifyPassword($password, $stored) {
 
 function appPasswordNeedsMigration($stored) {
     return !is_string($stored) || !str_starts_with($stored, '$') || password_needs_rehash($stored, appPasswordAlgorithm());
+}
+
+if (!defined('APP_MAINTENANCE_STATUS_ENDPOINT')) {
+    appRejectIfMaintenance();
 }
